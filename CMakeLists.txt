@@ -182,10 +182,10 @@ endif()
 
 target_link_libraries(SessionAppFramework
     PUBLIC
-        nlohmann_json::nlohmann_json
         OpenSSL::SSL
         OpenSSL::Crypto
     PRIVATE
+        nlohmann_json::nlohmann_json
         -Wl,--start-group
         ${LIBSESSION_LIBRARIES}
         -Wl,--end-group
