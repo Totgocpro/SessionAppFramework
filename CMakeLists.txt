@@ -64,11 +64,21 @@ if(NOT LIBSESSION_FOUND AND NOT LIBSESSION_INCLUDE_DIRS)
         )
         
         # Look for libraries in Build folder
+        # On Windows/MinGW, files might be named libsession-util.a or session-util.lib
         file(GLOB_RECURSE FOUND_LIBS 
             "${LIBSESSION_BUILD_DIR}/*.a"
             "${LIBSESSION_BUILD_DIR}/*.lib"
         )
-        set(LIBSESSION_LIBRARIES "${FOUND_LIBS}")
+        
+        # Filter out potential duplicates or non-library files if any, 
+        # and ensure absolute paths are used (GLOB_RECURSE does this).
+        set(LIBSESSION_LIBRARIES "")
+        foreach(LIB_PATH ${FOUND_LIBS})
+            # Skip some internal cmake artifacts that might match .a
+            if(NOT LIB_PATH MATCHES "CMakeLTOTest")
+                list(APPEND LIBSESSION_LIBRARIES "${LIB_PATH}")
+            endif()
+        endforeach()
         set(LIBSESSION_FOUND TRUE)
     endif()
 endif()
