@@ -1,0 +1,25 @@
+# Build directories
+build/
+Build/
+bin/
+lib/
+
+# IDE and system files
+.vscode/
+.idea/
+.cache/
+.DS_Store
+*.swp
+*.sublime-*
+
+# Session-specific temporary files
+messages.db
+*.log
+
+# Executables
+examples/01_create_account
+examples/02_send_receive_dm
+examples/03_group_bot
+examples/04_file_transfer
+examples/05_echo_bot
+examples/06_group_management_bot
