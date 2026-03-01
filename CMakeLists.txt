@@ -163,6 +163,12 @@ if(SAF_BUILD_PYTHON)
     find_package(pybind11 REQUIRED)
     pybind11_add_module(session_saf python/bindings.cpp)
     target_link_libraries(session_saf PRIVATE SAF::SessionAppFramework)
+    
+    # REQUIRED for scikit-build-core to include the module in the wheel
+    install(TARGETS session_saf 
+            LIBRARY DESTINATION .
+            RUNTIME DESTINATION .
+            COMPONENT python_modules)
 endif()
 
 install(TARGETS SessionAppFramework EXPORT SessionAppFrameworkTargets

@@ -1,0 +1,38 @@
+[build-system]
+requires = ["scikit-build-core>=0.10", "pybind11"]
+build-backend = "scikit-build-core.build"
+
+[project]
+name = "session-saf"
+version = "1.0.0"
+description = "High-level Python bindings for SessionAppFramework"
+readme = "README.md"
+requires-python = ">=3.8"
+authors = [
+    { name = "tototcs", email = "tototcs791@gmail.com" },
+]
+dependencies = []
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "Programming Language :: C++",
+    "License :: OSI Approved :: GNU General Public License v3 (GPLv3)",
+    "Operating System :: POSIX :: Linux",
+    "Operating System :: Microsoft :: Windows",
+    "Operating System :: MacOS",
+]
+
+[tool.scikit-build]
+cmake.args = [
+    "-DSAF_BUILD_PYTHON=ON",
+    "-DSAF_BUILD_EXAMPLES=OFF",
+    "-DCMAKE_POSITION_INDEPENDENT_CODE=ON"
+]
+wheel.expand-build-tag = true
+install.components = ["python_modules"]
+
+[tool.cibuildwheel]
+build-verbosity = "1"
+# Before building the wheel, we need to build the C++ dependencies
+before-all = "cd libsession-util && bash build.sh"
+# On Windows, we might need different logic, but let's start with this
+test-command = "python -c 'import session_saf; print("Success")'"
