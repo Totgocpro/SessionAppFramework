@@ -29,6 +29,19 @@ if(NOT WIN32)
     find_package(PkgConfig)
 endif()
 
+# OpenSSL (Required by both CURL and SAF)
+if(WIN32 AND NOT OPENSSL_ROOT_DIR)
+    # Check common paths on GitHub Runners and Windows systems
+    foreach(DIR "C:/Program Files/OpenSSL-Win64" "C:/Program Files/OpenSSL" "C:/local/OpenSSL-Win64")
+        if(EXISTS "${DIR}")
+            set(OPENSSL_ROOT_DIR "${DIR}" CACHE PATH "" FORCE)
+            message(STATUS "Setting OPENSSL_ROOT_DIR to ${DIR}")
+            break()
+        endif()
+    endforeach()
+endif()
+find_package(OpenSSL REQUIRED)
+
 # libsession-util  (must be installed or provided via -DLIBSESSION_ROOT=...)
 if(NOT LIBSESSION_FOUND AND NOT LIBSESSION_INCLUDE_DIRS)
     set(LOCAL_LIBSESSION_DIR "${CMAKE_CURRENT_SOURCE_DIR}/libsession-util")
@@ -110,13 +123,6 @@ if(NOT nlohmann_json_FOUND)
     )
     FetchContent_MakeAvailable(nlohmann_json)
 endif()
-
-# OpenSSL (for additional crypto, key serialisation)
-if(WIN32 AND NOT OPENSSL_ROOT_DIR)
-    # Common path on GitHub Windows Runners
-    set(OPENSSL_ROOT_DIR "C:/Program Files/OpenSSL")
-endif()
-find_package(OpenSSL REQUIRED)
 
 # ─────────────────────────────────────────────────────────
 # Source files
