@@ -30,8 +30,8 @@ if(NOT WIN32)
 endif()
 
 # OpenSSL (Required by both CURL and SAF)
-if(WIN32 AND NOT OPENSSL_ROOT_DIR)
-    # Check common paths on GitHub Runners and Windows systems
+if(WIN32 AND NOT MINGW AND NOT OPENSSL_ROOT_DIR)
+    # Check common paths on GitHub Runners and Windows systems (only for MSVC)
     foreach(DIR "C:/Program Files/OpenSSL-Win64" "C:/Program Files/OpenSSL" "C:/local/OpenSSL-Win64")
         if(EXISTS "${DIR}")
             set(OPENSSL_ROOT_DIR "${DIR}" CACHE PATH "" FORCE)
