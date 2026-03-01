@@ -15,12 +15,12 @@ echo [1/3] Building libsession-util local dependencies...
 if not exist "%LIBSESSION_BUILD%\src\session-util.lib" (
     if not exist "%LIBSESSION_BUILD%\src\Release\session-util.lib" (
         echo    ^> Patching libsession-util/CMakeLists.txt...
-        powershell -Command "(Get-Content '%LIBSESSION_DIR%\CMakeLists.txt') -replace 'target_compile_options\(libsession-util_src', '# target_compile_options(libsession-util_src' | Set-Content '%LIBSESSION_DIR%\CMakeLists.txt'"
+        :: Use a more robust powershell call
+        powershell -NoProfile -ExecutionPolicy Bypass -Command "$path = '%LIBSESSION_DIR%\CMakeLists.txt'; (Get-Content $path) -replace 'target_compile_options\(libsession-util_src', '# target_compile_options(libsession-util_src' | Set-Content $path"
 
         echo    ^> Configuring libsession-util...
         if not exist "%LIBSESSION_BUILD%" mkdir "%LIBSESSION_BUILD%"
         
-        :: We try to use the default generator (usually Visual Studio)
         cmake -S "%LIBSESSION_DIR%" -B "%LIBSESSION_BUILD%" ^
               -D STATIC_BUNDLE=ON ^
               -D BUILD_STATIC_DEPS=ON ^
@@ -44,7 +44,7 @@ set SPDLOG_INC=%LIBSESSION_DIR%\external\oxen-logging\spdlog\include
 set PROTO_INC=%LIBSESSION_DIR%\proto
 
 :: Collect all .lib files from libsession-util build
-powershell -Command "$libs = Get-ChildItem -Path '%LIBSESSION_BUILD%' -Filter *.lib -Recurse | %% { $_.FullName }; $libs -join ';'" > libs_temp.txt
+powershell -NoProfile -ExecutionPolicy Bypass -Command "$libs = Get-ChildItem -Path '%LIBSESSION_BUILD%' -Filter *.lib -Recurse | %% { $_.FullName }; $libs -join ';'" > libs_temp.txt
 set /p LIBSESSION_LIBS=<libs_temp.txt
 del libs_temp.txt
 
@@ -62,6 +62,7 @@ cmake --build "%BUILD_DIR%" --config Release --parallel
 
 echo.
 echo ✅  Build complete!
-echo    Library:  %BUILD_DIR%\Release\SessionAppFramework.lib
-echo    Examples: %BUILD_DIR%\examples\Release
-pause
+
+if not defined GITHUB_ACTIONS (
+    pause
+)
