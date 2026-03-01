@@ -25,15 +25,20 @@ option(SAF_ENABLE_ONION    "Enable onion-routing (requires libsession-util ENABL
 # ─────────────────────────────────────────────────────────
 # Dependencies
 # ─────────────────────────────────────────────────────────
-find_package(PkgConfig REQUIRED)
+if(NOT WIN32)
+    find_package(PkgConfig)
+endif()
 
 # libsession-util  (must be installed or provided via -DLIBSESSION_ROOT=...)
 if(DEFINED LIBSESSION_ROOT)
     list(PREPEND CMAKE_PREFIX_PATH "${LIBSESSION_ROOT}")
 endif()
 
-# Try pkg-config first, then manual path
-pkg_check_modules(LIBSESSION libsession-util)
+# Try pkg-config first (if available), then manual path
+if(PKG_CONFIG_FOUND)
+    pkg_check_modules(LIBSESSION libsession-util)
+endif()
+
 if(NOT LIBSESSION_FOUND)
     find_path(LIBSESSION_INCLUDE_DIRS session/config/user_profile.hpp
         PATHS ${LIBSESSION_ROOT}/include /usr/local/include /usr/include
