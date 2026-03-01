@@ -86,7 +86,7 @@ if(NOT CURL_FOUND)
     FetchContent_Declare(
         curl
         URL https://github.com/curl/curl/releases/download/curl-8_12_1/curl-8.12.1.tar.xz
-        URL_HASH SHA256=69962ee893df8fa99321849992ef659cfef90ef9162fa8bc85670fcad99ca468
+        URL_HASH SHA256=0341f1ed97a26c811abaebd37d62b833956792b7607ea3f15d001613c76de202
     )
     set(BUILD_CURL_EXE OFF CACHE INTERNAL "")
     set(BUILD_SHARED_LIBS OFF CACHE INTERNAL "")
@@ -94,7 +94,6 @@ if(NOT CURL_FOUND)
     set(CURL_USE_OPENSSL ON CACHE INTERNAL "")
     FetchContent_MakeAvailable(curl)
     set(CURL_LIBRARIES libcurl)
-    # Get curl include dir
     FetchContent_GetProperties(curl SOURCE_DIR CURL_SOURCE_DIR)
     FetchContent_GetProperties(curl BINARY_DIR CURL_BINARY_DIR)
     set(CURL_INCLUDE_DIRS "${CURL_SOURCE_DIR}/include" "${CURL_BINARY_DIR}/include/curl")
@@ -113,17 +112,11 @@ if(NOT nlohmann_json_FOUND)
 endif()
 
 # OpenSSL (for additional crypto, key serialisation)
-find_package(OpenSSL QUIET)
-if(NOT OPENSSL_FOUND)
-    if(WIN32)
-        message(STATUS "OpenSSL not found, on Windows please ensure it is installed or use a provider.")
-        # Building OpenSSL from source via FetchContent is very slow/complex on Windows.
-        # We'll try to find it in common paths or let it fail with a better message.
-        find_package(OpenSSL REQUIRED) 
-    else()
-        find_package(OpenSSL REQUIRED)
-    endif()
+if(WIN32 AND NOT OPENSSL_ROOT_DIR)
+    # Common path on GitHub Windows Runners
+    set(OPENSSL_ROOT_DIR "C:/Program Files/OpenSSL")
 endif()
+find_package(OpenSSL REQUIRED)
 
 # ─────────────────────────────────────────────────────────
 # Source files
