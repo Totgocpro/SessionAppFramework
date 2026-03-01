@@ -35,6 +35,10 @@ if [[ "$OSTYPE" == "msys" || "$OSTYPE" == "cygwin" ]]; then
     BUILD_STATIC_DEPS="OFF"
     # Static bundle might not work well with system packages on Windows
     STATIC_BUNDLE="OFF"
+
+    # Force regeneration of proto files to avoid version mismatch with MSYS2 protobuf
+    echo "   > Removing pre-generated proto files to force regeneration..."
+    rm -f libsession-util/proto/*.pb.cc libsession-util/proto/*.pb.h
 fi
 
 if [ ! -f "libsession-util/CMakeLists.txt" ]; then
