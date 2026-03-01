@@ -9,35 +9,36 @@ BUILD_DIR="${SCRIPT_DIR}/Build"
 LIBSESSION_DIR="${SCRIPT_DIR}/libsession-util"
 LIBSESSION_BUILD="${LIBSESSION_DIR}/Build"
 
-# ── Setup Colors ─────────────────────────────────────────
-BLUE='\033[0;34m'
-GREEN='\033[0;32m'
-NC='\033[0m' # No Color
+# Determine build generator
+GENERATOR="Unix Makefiles"
+if command -v ninja >/dev/null 2>&1; then
+    GENERATOR="Ninja"
+fi
 
-echo -e "${BLUE}>>> 1. Building libsession-util local dependencies...${NC}"
+echo ">>> Using generator: ${GENERATOR}"
 
-# 1. Compile libsession-util (locally if not done)
+# 1. Compile libsession-util
+echo ">>> 1. Building libsession-util local dependencies..."
+
+# Always try to patch to be safe
+python3 -c "import sys; content = open('$LIBSESSION_DIR/CMakeLists.txt').read(); open('$LIBSESSION_DIR/CMakeLists.txt', 'w').write(content.replace('target_compile_options(libsession-util_src', '# target_compile_options(libsession-util_src'))"
+
 if [ ! -d "$LIBSESSION_BUILD" ] || [ ! -f "$LIBSESSION_BUILD/src/libsession-util.a" ]; then
-    echo -e "${BLUE}   > Patching libsession-util/CMakeLists.txt...${NC}"
-    # Portable patch using python
-    python3 -c "import sys; content = open('$LIBSESSION_DIR/CMakeLists.txt').read(); open('$LIBSESSION_DIR/CMakeLists.txt', 'w').write(content.replace('target_compile_options(libsession-util_src', '# target_compile_options(libsession-util_src'))"
-
-    echo -e "${BLUE}   > Configuring libsession-util...${NC}"
+    echo "   > Configuring libsession-util..."
     mkdir -p "$LIBSESSION_BUILD"
-    # Note: We build with Ninja for speed
-    cmake -G Ninja -S "$LIBSESSION_DIR" -B "$LIBSESSION_BUILD" \
+    cmake -G "${GENERATOR}" -S "$LIBSESSION_DIR" -B "$LIBSESSION_BUILD" \
           -D STATIC_BUNDLE=ON \
           -D BUILD_STATIC_DEPS=ON \
           -D WITH_TESTS=OFF \
           -D CMAKE_CXX_FLAGS="-Wno-stringop-overflow"
     
-    echo -e "${BLUE}   > Compiling libsession-util...${NC}"
+    echo "   > Compiling libsession-util..."
     cmake --build "$LIBSESSION_BUILD" --parallel
 else
-    echo -e "${GREEN}   > libsession-util already built.${NC}"
+    echo "   > libsession-util already built."
 fi
 
-echo -e "${BLUE}>>> 2. Configuring SessionAppFramework...${NC}"
+echo ">>> 2. Configuring SessionAppFramework..."
 
 # Find internal headers required by libsession-util
 OXENC_INC="${LIBSESSION_DIR}/external/oxen-libquic/external/oxen-encoding"
@@ -49,26 +50,17 @@ PROTO_INC="${LIBSESSION_DIR}/proto"
 LIBSESSION_LIBS=($(find "$LIBSESSION_BUILD" -name "*.a"))
 LIBSESSION_LIBS_STR=$(IFS=';'; echo "${LIBSESSION_LIBS[*]}")
 
-CMAKE_ARGS=(
-    -G Ninja
-    -S "${SCRIPT_DIR}"
-    -B "${BUILD_DIR}"
-    -D CMAKE_BUILD_TYPE="Release"
-    -D SAF_BUILD_EXAMPLES=ON
-    -D SAF_ENABLE_ONION=ON
-    # Point directly to the local libsession-util build and its dependency headers
-    -D LIBSESSION_INCLUDE_DIRS="${LIBSESSION_DIR}/include;${OXENC_INC};${FMT_INC};${SPDLOG_INC};${PROTO_INC}"
-    -D LIBSESSION_LIBRARIES="${LIBSESSION_LIBS_STR}"
-)
-
 mkdir -p "$BUILD_DIR"
-cmake "${CMAKE_ARGS[@]}"
+cmake -G "${GENERATOR}" \
+    -S "${SCRIPT_DIR}" \
+    -B "${BUILD_DIR}" \
+    -D CMAKE_BUILD_TYPE="Release" \
+    -D SAF_BUILD_EXAMPLES=ON \
+    -D SAF_ENABLE_ONION=ON \
+    -D LIBSESSION_INCLUDE_DIRS="${LIBSESSION_DIR}/include;${OXENC_INC};${FMT_INC};${SPDLOG_INC};${PROTO_INC}" \
+    -D LIBSESSION_LIBRARIES="${LIBSESSION_LIBS_STR}"
 
-echo -e "${BLUE}>>> 3. Compiling SessionAppFramework...${NC}"
+echo ">>> 3. Compiling SessionAppFramework..."
 cmake --build "${BUILD_DIR}" --parallel
 
-echo -e "${GREEN}"
 echo "✅  Build complete!"
-echo "   Library:  ${BUILD_DIR}/libSessionAppFramework.a"
-echo "   Examples: ${BUILD_DIR}/examples/"
-echo -e "${NC}"
