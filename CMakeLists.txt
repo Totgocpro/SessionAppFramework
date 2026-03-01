@@ -7,6 +7,7 @@ project(SessionAppFramework VERSION 1.0.0 LANGUAGES CXX)
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
+set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 
 if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
     add_compile_options(-Wno-stringop-overflow)
@@ -153,8 +154,18 @@ endif()
 include(GNUInstallDirs)
 include(CMakePackageConfigHelpers)
 
-install(TARGETS SessionAppFramework
-    EXPORT SessionAppFrameworkTargets
+# ─────────────────────────────────────────────────────────
+# Python Bindings (Optional)
+# ─────────────────────────────────────────────────────────
+option(SAF_BUILD_PYTHON "Build Python bindings" OFF)
+
+if(SAF_BUILD_PYTHON)
+    find_package(pybind11 REQUIRED)
+    pybind11_add_module(session_saf python/bindings.cpp)
+    target_link_libraries(session_saf PRIVATE SAF::SessionAppFramework)
+endif()
+
+install(TARGETS SessionAppFramework EXPORT SessionAppFrameworkTargets
     ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR}
     LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}
     RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}

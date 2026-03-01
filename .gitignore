@@ -3,6 +3,7 @@ build/
 Build/
 bin/
 lib/
+*.so
 
 # IDE and system files
 .vscode/
@@ -12,8 +13,12 @@ lib/
 *.swp
 *.sublime-*
 
+# Python temp files
+.venv/
+
 # Session-specific temporary files
 messages.db
+*.db
 *.log
 
 # Executables
