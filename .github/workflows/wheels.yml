@@ -37,6 +37,7 @@ jobs:
             mingw-w64-x86_64-curl
             mingw-w64-x86_64-libsodium
             mingw-w64-x86_64-protobuf
+            mingw-w64-x86_64-python
 
       - name: Build wheels
         uses: pypa/cibuildwheel@v2.21.3

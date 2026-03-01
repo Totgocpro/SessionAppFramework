@@ -17,11 +17,17 @@ fi
 
 echo ">>> Using generator: ${GENERATOR}"
 
+# Detect available python
+PYTHON="python3"
+if ! command -v python3 >/dev/null 2>&1; then
+    PYTHON="python"
+fi
+
 # 1. Compile libsession-util
 echo ">>> 1. Building libsession-util local dependencies..."
 
 # Always try to patch to be safe
-python3 -c "import sys; content = open('$LIBSESSION_DIR/CMakeLists.txt').read(); open('$LIBSESSION_DIR/CMakeLists.txt', 'w').write(content.replace('target_compile_options(libsession-util_src', '# target_compile_options(libsession-util_src'))"
+$PYTHON -c "import sys; content = open('$LIBSESSION_DIR/CMakeLists.txt').read(); open('$LIBSESSION_DIR/CMakeLists.txt', 'w').write(content.replace('target_compile_options(libsession-util_src', '# target_compile_options(libsession-util_src'))"
 
 if [ ! -d "$LIBSESSION_BUILD" ] || [ ! -f "$LIBSESSION_BUILD/src/libsession-util.a" ]; then
     echo "   > Configuring libsession-util..."
