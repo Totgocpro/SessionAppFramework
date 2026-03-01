@@ -48,7 +48,7 @@ if(NOT LIBSESSION_FOUND AND NOT LIBSESSION_INCLUDE_DIRS)
     if(EXISTS "${LOCAL_LIBSESSION_DIR}/include/session/config/user_profile.hpp")
         message(STATUS "Found local libsession-util source directory")
         set(LIBSESSION_ROOT "${LOCAL_LIBSESSION_DIR}")
-        set(LIBSESSION_BUILD_DIR "${LOCAL_LIBSESSION_DIR}/Build")
+        file(TO_CMAKE_PATH "${LOCAL_LIBSESSION_DIR}/Build" LIBSESSION_BUILD_DIR)
         
         set(OXENC_INC "${LOCAL_LIBSESSION_DIR}/external/oxen-libquic/external/oxen-encoding")
         set(FMT_INC "${LOCAL_LIBSESSION_DIR}/external/oxen-logging/fmt/include")
@@ -70,15 +70,15 @@ if(NOT LIBSESSION_FOUND AND NOT LIBSESSION_INCLUDE_DIRS)
             "${LIBSESSION_BUILD_DIR}/*.lib"
         )
         
-        # Filter out potential duplicates or non-library files if any, 
-        # and ensure absolute paths are used (GLOB_RECURSE does this).
         set(LIBSESSION_LIBRARIES "")
         foreach(LIB_PATH ${FOUND_LIBS})
             # Skip some internal cmake artifacts that might match .a
             if(NOT LIB_PATH MATCHES "CMakeLTOTest")
-                list(APPEND LIBSESSION_LIBRARIES "${LIB_PATH}")
+                file(TO_CMAKE_PATH "${LIB_PATH}" CLEAN_LIB_PATH)
+                list(APPEND LIBSESSION_LIBRARIES "${CLEAN_LIB_PATH}")
             endif()
         endforeach()
+        message(STATUS "Found libraries: ${LIBSESSION_LIBRARIES}")
         set(LIBSESSION_FOUND TRUE)
     endif()
 endif()

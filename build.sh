@@ -5,6 +5,10 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+if [[ "$OSTYPE" == "msys" || "$OSTYPE" == "cygwin" ]]; then
+    # Use Windows-style paths for CMake on MSYS2
+    SCRIPT_DIR="$(pwd -W)"
+fi
 BUILD_DIR="${SCRIPT_DIR}/Build"
 LIBSESSION_DIR="${SCRIPT_DIR}/libsession-util"
 LIBSESSION_BUILD="${LIBSESSION_DIR}/Build"
@@ -77,8 +81,8 @@ PROTO_INC="${LIBSESSION_DIR}/proto"
 
 # Collect ALL static libraries from the build folder
 if [[ "$OSTYPE" == "msys" || "$OSTYPE" == "cygwin" ]]; then
-    # Windows/MinGW: look for .a and .lib
-    LIBSESSION_LIBS=($(find "$LIBSESSION_BUILD" -name "*.a" -o -name "*.lib"))
+    # Windows/MinGW: look for .a and .lib and convert to Windows paths
+    LIBSESSION_LIBS=($(find "$LIBSESSION_BUILD" -name "*.a" -o -name "*.lib" | xargs cygpath -m))
 else
     # Linux/Mac
     LIBSESSION_LIBS=($(find "$LIBSESSION_BUILD" -name "*.a"))
