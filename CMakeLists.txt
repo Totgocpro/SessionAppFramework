@@ -2,7 +2,7 @@ cmake_minimum_required(VERSION 3.16)
 project(SessionAppFramework VERSION 1.0.0 LANGUAGES CXX)
 
 # ─────────────────────────────────────────────────────────
-# C++ Standard
+# C++ Standard & Compiler Flags
 # ─────────────────────────────────────────────────────────
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -10,7 +10,8 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 
 if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
-    add_compile_options(-Wno-stringop-overflow)
+    # Disable overzealous warnings often triggered in generated protobuf code or low-level crypto
+    add_compile_options(-Wno-stringop-overflow -Wno-stringop-overread)
     add_link_options(-Wno-stringop-overflow)
 endif()
 
@@ -23,7 +24,7 @@ option(SAF_BUILD_SHARED    "Build shared library"   OFF)
 option(SAF_ENABLE_ONION    "Enable onion-routing"   ON)
 
 # ─────────────────────────────────────────────────────────
-# Dependencies
+# Dependencies Detection
 # ─────────────────────────────────────────────────────────
 find_package(PkgConfig QUIET)
 
@@ -121,21 +122,11 @@ endif()
 add_library(SAF::SessionAppFramework ALIAS SessionAppFramework)
 
 # Standard Includes
-target_include_directories(SessionAppFramework
-    PUBLIC
-        $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
-        $<INSTALL_INTERFACE:include>
-)
+target_include_directories(SessionAppFramework PUBLIC "$<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>" "$<INSTALL_INTERFACE:include>")
 
-# System Includes (to suppress warnings and handle external paths)
-target_include_directories(SessionAppFramework SYSTEM PRIVATE
-    ${LIBSESSION_INCLUDE_DIRS}
-    ${CURL_INCLUDE_DIRS}
-)
-
-if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
-    target_compile_options(SessionAppFramework PUBLIC -Wno-stringop-overflow)
-endif()
+# System Includes (libsession-util and curl)
+target_include_directories(SessionAppFramework SYSTEM PRIVATE ${LIBSESSION_INCLUDE_DIRS})
+target_include_directories(SessionAppFramework SYSTEM PRIVATE ${CURL_INCLUDE_DIRS})
 
 target_link_libraries(SessionAppFramework
     PUBLIC
@@ -152,31 +143,41 @@ target_link_libraries(SessionAppFramework
 # ─────────────────────────────────────────────────────────
 # System Dependencies (Protobuf, Sodium, etc.)
 # ─────────────────────────────────────────────────────────
-find_package(Protobuf QUIET)
-if(Protobuf_FOUND)
-    target_include_directories(SessionAppFramework SYSTEM PRIVATE ${Protobuf_INCLUDE_DIRS})
-    if(TARGET Protobuf::libprotobuf-lite)
-        target_link_libraries(SessionAppFramework PRIVATE Protobuf::libprotobuf-lite)
-    elseif(TARGET Protobuf::libprotobuf)
-        target_link_libraries(SessionAppFramework PRIVATE Protobuf::libprotobuf)
-    else()
-        target_link_libraries(SessionAppFramework PRIVATE ${Protobuf_LIBRARIES})
+
+# Protobuf: try PkgConfig first, then FindProtobuf
+pkg_check_modules(PROTOBUF_LITE QUIET protobuf-lite IMPORTED_TARGET)
+if(PROTOBUF_LITE_FOUND)
+    target_include_directories(SessionAppFramework SYSTEM PRIVATE ${PROTOBUF_LITE_INCLUDE_DIRS})
+    target_link_libraries(SessionAppFramework PRIVATE PkgConfig::PROTOBUF_LITE)
+else()
+    find_package(Protobuf QUIET)
+    if(Protobuf_FOUND)
+        target_include_directories(SessionAppFramework SYSTEM PRIVATE ${Protobuf_INCLUDE_DIRS})
+        if(TARGET Protobuf::libprotobuf-lite)
+            target_link_libraries(SessionAppFramework PRIVATE Protobuf::libprotobuf-lite)
+        elseif(TARGET Protobuf::libprotobuf)
+            target_link_libraries(SessionAppFramework PRIVATE Protobuf::libprotobuf)
+        else()
+            target_link_libraries(SessionAppFramework PRIVATE ${Protobuf_LIBRARIES})
+        endif()
     endif()
 endif()
 
+# Sodium: try PkgConfig
 if(PKG_CONFIG_FOUND)
     pkg_check_modules(SODIUM QUIET libsodium IMPORTED_TARGET)
     if(SODIUM_FOUND)
         target_include_directories(SessionAppFramework SYSTEM PRIVATE ${SODIUM_INCLUDE_DIRS})
         target_link_libraries(SessionAppFramework PRIVATE PkgConfig::SODIUM)
     endif()
-    
-    if(SAF_ENABLE_ONION)
-        pkg_check_modules(NETTLE QUIET nettle IMPORTED_TARGET)
-        if(NETTLE_FOUND)
-            target_include_directories(SessionAppFramework SYSTEM PRIVATE ${NETTLE_INCLUDE_DIRS})
-            target_link_libraries(SessionAppFramework PRIVATE PkgConfig::NETTLE)
-        endif()
+endif()
+
+# Nettle: try PkgConfig (if onion enabled)
+if(SAF_ENABLE_ONION AND PKG_CONFIG_FOUND)
+    pkg_check_modules(NETTLE QUIET nettle IMPORTED_TARGET)
+    if(NETTLE_FOUND)
+        target_include_directories(SessionAppFramework SYSTEM PRIVATE ${NETTLE_INCLUDE_DIRS})
+        target_link_libraries(SessionAppFramework PRIVATE PkgConfig::NETTLE)
     endif()
 endif()
 
@@ -185,7 +186,7 @@ if(SAF_ENABLE_ONION)
 endif()
 
 # ─────────────────────────────────────────────────────────
-# Subdirectories / Install
+# Examples / Tests / Install / Python
 # ─────────────────────────────────────────────────────────
 if(SAF_BUILD_EXAMPLES)
     add_subdirectory(examples)
