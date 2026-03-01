@@ -1,13 +1,13 @@
 [build-system]
 requires = ["scikit-build-core>=0.10", "pybind11"]
-build-backend = "scikit-build-core.build"
+build-backend = "scikit_build_core.build"
 
 [project]
 name = "session-saf"
 version = "1.0.0"
 description = "High-level Python bindings for SessionAppFramework"
 readme = "README.md"
-requires-python = ">=3.8"
+requires-python = ">=3.9"
 authors = [
     { name = "tototcs", email = "tototcs791@gmail.com" },
 ]
@@ -32,6 +32,6 @@ install.components = ["python_modules"]
 
 [tool.cibuildwheel]
 build-verbosity = "1"
-# Before building the wheel, we need to build the C++ dependencies
-# Handled in .github/workflows/wheels.yml
+# Skip Python 3.8 as it is reaching EOL and causing build issues on Windows
+skip = "cp38-*"
 test-command = "python -c \"import session_saf; print('Success')\""
