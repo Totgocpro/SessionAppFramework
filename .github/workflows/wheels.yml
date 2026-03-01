@@ -38,6 +38,16 @@ jobs:
             mingw-w64-x86_64-libsodium
             mingw-w64-x86_64-protobuf
             mingw-w64-x86_64-python
+            mingw-w64-x86_64-libevent
+            mingw-w64-x86_64-nettle
+            mingw-w64-x86_64-gnutls
+            mingw-w64-x86_64-gmp
+            mingw-w64-x86_64-libidn2
+            mingw-w64-x86_64-libunistring
+            mingw-w64-x86_64-libtasn1
+            mingw-w64-x86_64-libiconv
+            mingw-w64-x86_64-zstd
+            pkg-config
 
       - name: Build wheels
         uses: pypa/cibuildwheel@v2.21.3

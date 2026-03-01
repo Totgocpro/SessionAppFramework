@@ -26,6 +26,17 @@ fi
 # 1. Compile libsession-util
 echo ">>> 1. Building libsession-util local dependencies..."
 
+BUILD_STATIC_DEPS="ON"
+STATIC_BUNDLE="ON"
+if [[ "$OSTYPE" == "msys" || "$OSTYPE" == "cygwin" ]]; then
+    # On Windows/MSYS2, building static deps from source via libsession-util is broken
+    # because it tries to run ./configure scripts using cmd.exe.
+    # We use system packages instead.
+    BUILD_STATIC_DEPS="OFF"
+    # Static bundle might not work well with system packages on Windows
+    STATIC_BUNDLE="OFF"
+fi
+
 if [ ! -f "libsession-util/CMakeLists.txt" ]; then
     echo "❌ Error: libsession-util/CMakeLists.txt not found!"
     echo "Current directory content:"
@@ -40,8 +51,8 @@ if [ ! -d "$LIBSESSION_BUILD" ] || [ ! -f "$LIBSESSION_BUILD/src/libsession-util
     echo "   > Configuring libsession-util..."
     mkdir -p "$LIBSESSION_BUILD"
     cmake -G "${GENERATOR}" -S "$LIBSESSION_DIR" -B "$LIBSESSION_BUILD" \
-          -D STATIC_BUNDLE=ON \
-          -D BUILD_STATIC_DEPS=ON \
+          -D STATIC_BUNDLE="${STATIC_BUNDLE}" \
+          -D BUILD_STATIC_DEPS="${BUILD_STATIC_DEPS}" \
           -D WITH_TESTS=OFF \
           -D CMAKE_CXX_FLAGS="-Wno-stringop-overflow"
     
