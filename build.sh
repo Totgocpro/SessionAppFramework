@@ -37,8 +37,9 @@ if [[ "$OSTYPE" == "msys" || "$OSTYPE" == "cygwin" ]]; then
     STATIC_BUNDLE="OFF"
 
     # Force regeneration of proto files to avoid version mismatch with MSYS2 protobuf
-    echo "   > Removing pre-generated proto files to force regeneration..."
-    rm -f libsession-util/proto/*.pb.cc libsession-util/proto/*.pb.h
+    echo "   > Regenerating proto files using system protoc..."
+    # We need to be in the proto directory to run protoc effectively as per their custom target
+    (cd libsession-util/proto && protoc --cpp_out=. SessionProtos.proto WebSocketResources.proto)
 fi
 
 if [ ! -f "libsession-util/CMakeLists.txt" ]; then
