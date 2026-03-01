@@ -79,7 +79,26 @@ if(NOT LIBSESSION_FOUND)
 endif()
 
 # libcurl (HTTP for swarm communication)
-find_package(CURL REQUIRED)
+find_package(CURL QUIET)
+if(NOT CURL_FOUND)
+    message(STATUS "CURL not found, downloading...")
+    include(FetchContent)
+    FetchContent_Declare(
+        curl
+        URL https://github.com/curl/curl/releases/download/curl-8_12_1/curl-8.12.1.tar.xz
+        URL_HASH SHA256=69962ee893df8fa99321849992ef659cfef90ef9162fa8bc85670fcad99ca468
+    )
+    set(BUILD_CURL_EXE OFF CACHE INTERNAL "")
+    set(BUILD_SHARED_LIBS OFF CACHE INTERNAL "")
+    set(HTTP_ONLY ON CACHE INTERNAL "")
+    set(CURL_USE_OPENSSL ON CACHE INTERNAL "")
+    FetchContent_MakeAvailable(curl)
+    set(CURL_LIBRARIES libcurl)
+    # Get curl include dir
+    FetchContent_GetProperties(curl SOURCE_DIR CURL_SOURCE_DIR)
+    FetchContent_GetProperties(curl BINARY_DIR CURL_BINARY_DIR)
+    set(CURL_INCLUDE_DIRS "${CURL_SOURCE_DIR}/include" "${CURL_BINARY_DIR}/include/curl")
+endif()
 
 # nlohmann/json (JSON parsing for Session Node responses)
 find_package(nlohmann_json QUIET)
@@ -94,7 +113,17 @@ if(NOT nlohmann_json_FOUND)
 endif()
 
 # OpenSSL (for additional crypto, key serialisation)
-find_package(OpenSSL REQUIRED)
+find_package(OpenSSL QUIET)
+if(NOT OPENSSL_FOUND)
+    if(WIN32)
+        message(STATUS "OpenSSL not found, on Windows please ensure it is installed or use a provider.")
+        # Building OpenSSL from source via FetchContent is very slow/complex on Windows.
+        # We'll try to find it in common paths or let it fail with a better message.
+        find_package(OpenSSL REQUIRED) 
+    else()
+        find_package(OpenSSL REQUIRED)
+    endif()
+endif()
 
 # ─────────────────────────────────────────────────────────
 # Source files
