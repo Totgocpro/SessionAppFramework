@@ -185,7 +185,7 @@ target_link_libraries(SessionAppFramework
         OpenSSL::SSL
         OpenSSL::Crypto
     PRIVATE
-        nlohmann_json::nlohmann_json
+        $<BUILD_INTERFACE:nlohmann_json::nlohmann_json>
         -Wl,--start-group
         ${LIBSESSION_LIBRARIES}
         -Wl,--end-group
