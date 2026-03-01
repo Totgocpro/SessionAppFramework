@@ -12,36 +12,37 @@ set LIBSESSION_BUILD=%LIBSESSION_DIR%\Build
 
 echo [1/3] Building libsession-util local dependencies...
 
-if not exist "%LIBSESSION_BUILD%\src\session-util.lib" (
-    if not exist "%LIBSESSION_BUILD%\src\Release\session-util.lib" (
-        echo    ^> Patching libsession-util/CMakeLists.txt...
-        :: Use a more robust powershell call
-        powershell -NoProfile -ExecutionPolicy Bypass -Command "$path = '%LIBSESSION_DIR%\CMakeLists.txt'; (Get-Content $path) -replace 'target_compile_options\(libsession-util_src', '# target_compile_options(libsession-util_src' | Set-Content $path"
+:: Check if already built to skip
+if exist "%LIBSESSION_BUILD%\src\session-util.lib" goto :libs_ready
+if exist "%LIBSESSION_BUILD%\src\Release\session-util.lib" goto :libs_ready
 
-        echo    ^> Configuring libsession-util...
-        if not exist "%LIBSESSION_BUILD%" mkdir "%LIBSESSION_BUILD%"
-        
-        cmake -S "%LIBSESSION_DIR%" -B "%LIBSESSION_BUILD%" ^
-              -D STATIC_BUNDLE=ON ^
-              -D BUILD_STATIC_DEPS=ON ^
-              -D WITH_TESTS=OFF
-        
-        echo    ^> Compiling libsession-util...
-        cmake --build "%LIBSESSION_BUILD%" --config Release --parallel
-    ) else (
-        echo    ^> libsession-util already built (Release).
-    )
-) else (
-    echo    ^> libsession-util already built.
-)
+echo    ^> Patching libsession-util/CMakeLists.txt...
+:: Use a temporary variable for the path to avoid quote issues in PowerShell
+set "CM_PATH=%LIBSESSION_DIR%\CMakeLists.txt"
+powershell -NoProfile -ExecutionPolicy Bypass -Command "(Get-Content '%CM_PATH%') -replace 'target_compile_options\(libsession-util_src', '# target_compile_options(libsession-util_src' | Set-Content '%CM_PATH%'"
+
+echo    ^> Configuring libsession-util...
+if not exist "%LIBSESSION_BUILD%" mkdir "%LIBSESSION_BUILD%"
+
+cmake -S "%LIBSESSION_DIR%" -B "%LIBSESSION_BUILD%" ^
+      -D STATIC_BUNDLE=ON ^
+      -D BUILD_STATIC_DEPS=ON ^
+      -D WITH_TESTS=OFF
+
+echo    ^> Compiling libsession-util...
+cmake --build "%LIBSESSION_BUILD%" --config Release --parallel
+goto :libs_ready
+
+:libs_ready
+echo    ^> libsession-util is ready.
 
 echo [2/3] Configuring SessionAppFramework...
 
 :: Find internal headers required by libsession-util
-set OXENC_INC=%LIBSESSION_DIR%\external\oxen-libquic\external\oxen-encoding
-set FMT_INC=%LIBSESSION_DIR%\external\oxen-logging\fmt\include
-set SPDLOG_INC=%LIBSESSION_DIR%\external\oxen-logging\spdlog\include
-set PROTO_INC=%LIBSESSION_DIR%\proto
+set "OXENC_INC=%LIBSESSION_DIR%\external\oxen-libquic\external\oxen-encoding"
+set "FMT_INC=%LIBSESSION_DIR%\external\oxen-logging\fmt\include"
+set "SPDLOG_INC=%LIBSESSION_DIR%\external\oxen-logging\spdlog\include"
+set "PROTO_INC=%LIBSESSION_DIR%\proto"
 
 :: Collect all .lib files from libsession-util build
 powershell -NoProfile -ExecutionPolicy Bypass -Command "$libs = Get-ChildItem -Path '%LIBSESSION_BUILD%' -Filter *.lib -Recurse | %% { $_.FullName }; $libs -join ';'" > libs_temp.txt
