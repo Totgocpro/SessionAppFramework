@@ -55,13 +55,13 @@ jobs:
         env:
           CIBW_BEFORE_ALL_LINUX: >
             (if command -v yum; then 
-              yum install -y protobuf-devel curl-devel openssl-devel nettle-devel gmp-devel pkgconfig;
+              yum install -y protobuf-devel curl-devel openssl-devel nettle-devel gmp-devel libev-devel pkgconfig;
             elif command -v dnf; then
-              dnf install -y protobuf-devel curl-devel openssl-devel nettle-devel gmp-devel pkgconfig;
+              dnf install -y protobuf-devel curl-devel openssl-devel nettle-devel gmp-devel libev-devel pkgconfig;
             elif command -v apt-get; then
-              apt-get update && apt-get install -y libprotobuf-dev protobuf-compiler libcurl4-openssl-dev libssl-dev libnettle-dev libgmp-dev pkg-config;
+              apt-get update && apt-get install -y libprotobuf-dev protobuf-compiler libcurl4-openssl-dev libssl-dev libnettle-dev libgmp-dev libev-dev pkg-config;
             fi) &&
-            SAF_USE_SYSTEM_DEPS=ON SAF_SKIP_MAIN_BUILD=ON bash build.sh
+            SAF_USE_SYSTEM_DEPS=ON SAF_SKIP_MAIN_BUILD=ON SAF_ENABLE_ONION=OFF bash build.sh
           CIBW_BEFORE_ALL_MACOS: "bash build.sh"
           CIBW_BEFORE_ALL_WINDOWS: "msys2 -c './build.sh'"
           CIBW_ENVIRONMENT_WINDOWS: "CC=gcc CXX=g++ CMAKE_GENERATOR=Ninja"

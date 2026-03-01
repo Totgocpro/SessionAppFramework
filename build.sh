@@ -32,6 +32,8 @@ echo ">>> 1. Building libsession-util local dependencies..."
 
 BUILD_STATIC_DEPS="ON"
 STATIC_BUNDLE="ON"
+ENABLE_ONIONREQ="${SAF_ENABLE_ONION:-ON}"
+
 if [[ "$OSTYPE" == "msys" || "$OSTYPE" == "cygwin" ]] || [[ "${SAF_USE_SYSTEM_DEPS:-}" == "ON" ]]; then
     # On Windows/MSYS2, building static deps from source via libsession-util is broken.
     # On Linux CI, we prefer system deps to speed up the build.
@@ -60,6 +62,7 @@ if [ ! -d "$LIBSESSION_BUILD" ] || [ ! -f "$LIBSESSION_BUILD/src/libsession-util
     cmake -G "${GENERATOR}" -S "$LIBSESSION_DIR" -B "$LIBSESSION_BUILD" \
           -D STATIC_BUNDLE="${STATIC_BUNDLE}" \
           -D BUILD_STATIC_DEPS="${BUILD_STATIC_DEPS}" \
+          -D ENABLE_ONIONREQ="${ENABLE_ONIONREQ}" \
           -D WITH_TESTS=OFF \
           -D CMAKE_CXX_FLAGS="-Wno-stringop-overflow"
     
@@ -98,7 +101,7 @@ cmake -G "${GENERATOR}" \
     -B "${BUILD_DIR}" \
     -D CMAKE_BUILD_TYPE="Release" \
     -D SAF_BUILD_EXAMPLES=ON \
-    -D SAF_ENABLE_ONION=ON \
+    -D SAF_ENABLE_ONION="${ENABLE_ONIONREQ}" \
     -D LIBSESSION_ROOT="${LIBSESSION_DIR}" \
     -D LIBSESSION_INCLUDE_DIRS="${LIBSESSION_DIR}/include;${OXENC_INC};${FMT_INC};${SPDLOG_INC};${PROTO_INC}" \
     -D LIBSESSION_LIBRARIES="${LIBSESSION_LIBS_STR}"
