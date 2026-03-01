@@ -25,9 +25,7 @@ option(SAF_ENABLE_ONION    "Enable onion-routing (requires libsession-util ENABL
 # ─────────────────────────────────────────────────────────
 # Dependencies
 # ─────────────────────────────────────────────────────────
-if(NOT WIN32)
-    find_package(PkgConfig)
-endif()
+find_package(PkgConfig QUIET)
 
 # OpenSSL (Required by both CURL and SAF)
 if(WIN32 AND NOT MINGW AND NOT OPENSSL_ROOT_DIR)
@@ -201,6 +199,41 @@ target_link_libraries(SessionAppFramework
         -Wl,--end-group
         ${CURL_LIBRARIES}
 )
+
+# Handle system dependencies for libsession-util when not bundled (e.g., on Windows/MinGW)
+if(WIN32 OR MINGW)
+    if(PKG_CONFIG_FOUND)
+        pkg_check_modules(PROTOBUF_LITE protobuf-lite IMPORTED_TARGET)
+        if(PROTOBUF_LITE_FOUND)
+            target_link_libraries(SessionAppFramework PRIVATE PkgConfig::PROTOBUF_LITE)
+        else()
+            find_package(Protobuf QUIET)
+            if(Protobuf_FOUND)
+                if(TARGET Protobuf::libprotobuf-lite)
+                    target_link_libraries(SessionAppFramework PRIVATE Protobuf::libprotobuf-lite)
+                else()
+                    target_link_libraries(SessionAppFramework PRIVATE Protobuf::libprotobuf)
+                endif()
+            endif()
+        endif()
+
+        if(SAF_ENABLE_ONION)
+            pkg_check_modules(NETTLE nettle IMPORTED_TARGET)
+            if(NETTLE_FOUND)
+                target_link_libraries(SessionAppFramework PRIVATE PkgConfig::NETTLE)
+            endif()
+        endif()
+    else()
+        find_package(Protobuf QUIET)
+        if(Protobuf_FOUND)
+            if(TARGET Protobuf::libprotobuf-lite)
+                target_link_libraries(SessionAppFramework PRIVATE Protobuf::libprotobuf-lite)
+            else()
+                target_link_libraries(SessionAppFramework PRIVATE Protobuf::libprotobuf)
+            endif()
+        endif()
+    endif()
+endif()
 
 if(SAF_ENABLE_ONION)
     target_compile_definitions(SessionAppFramework PRIVATE SAF_ENABLE_ONION=1)
