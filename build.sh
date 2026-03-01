@@ -40,9 +40,12 @@ if [[ "$OSTYPE" == "msys" || "$OSTYPE" == "cygwin" ]] || [[ "${SAF_USE_SYSTEM_DE
     BUILD_STATIC_DEPS="OFF"
     STATIC_BUNDLE="OFF"
 
-    # Force regeneration of proto files to avoid version mismatch with system protobuf
-    echo "   > Regenerating proto files using system protoc..."
-    (cd libsession-util/proto && protoc --cpp_out=. SessionProtos.proto WebSocketResources.proto)
+    if [[ "$OSTYPE" == "msys" || "$OSTYPE" == "cygwin" ]]; then
+        # Force regeneration of proto files to avoid version mismatch with MSYS2 protobuf
+        # ONLY on Windows. On Linux, we use the pre-generated ones to avoid mismatch with submodule headers.
+        echo "   > Regenerating proto files using system protoc (MSYS2)..."
+        (cd libsession-util/proto && protoc --cpp_out=. SessionProtos.proto WebSocketResources.proto)
+    fi
 fi
 
 if [ ! -f "libsession-util/CMakeLists.txt" ]; then
