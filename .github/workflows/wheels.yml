@@ -41,10 +41,9 @@ jobs:
       - name: Build wheels
         uses: pypa/cibuildwheel@v2.21.3
         env:
-          # On Windows, we tell cibuildwheel to use the MSYS2 environment
           CIBW_BEFORE_ALL_LINUX: "bash build.sh"
           CIBW_BEFORE_ALL_MACOS: "bash build.sh"
-          CIBW_BEFORE_ALL_WINDOWS: "bash build.sh"
+          CIBW_BEFORE_ALL_WINDOWS: "msys2 {0} build.sh"
           CIBW_ENVIRONMENT_WINDOWS: "PATH=/c/msys64/mingw64/bin:/usr/bin:$PATH CC=gcc CXX=g++"
           CIBW_BUILD_VERBOSITY: 1
           CIBW_TEST_COMMAND: "python -c \"import session_saf; print('Success')\""
