@@ -26,8 +26,15 @@ fi
 # 1. Compile libsession-util
 echo ">>> 1. Building libsession-util local dependencies..."
 
-# Always try to patch to be safe
-$PYTHON -c "import sys; content = open('$LIBSESSION_DIR/CMakeLists.txt').read(); open('$LIBSESSION_DIR/CMakeLists.txt', 'w').write(content.replace('target_compile_options(libsession-util_src', '# target_compile_options(libsession-util_src'))"
+if [ ! -f "libsession-util/CMakeLists.txt" ]; then
+    echo "❌ Error: libsession-util/CMakeLists.txt not found!"
+    echo "Current directory content:"
+    ls -F
+    exit 1
+fi
+
+# Always try to patch to be safe - using relative path for Windows compatibility
+$PYTHON -c "import sys; content = open('libsession-util/CMakeLists.txt').read(); open('libsession-util/CMakeLists.txt', 'w').write(content.replace('target_compile_options(libsession-util_src', '# target_compile_options(libsession-util_src'))"
 
 if [ ! -d "$LIBSESSION_BUILD" ] || [ ! -f "$LIBSESSION_BUILD/src/libsession-util.a" ]; then
     echo "   > Configuring libsession-util..."
