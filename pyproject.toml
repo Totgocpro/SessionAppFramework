@@ -33,6 +33,5 @@ install.components = ["python_modules"]
 [tool.cibuildwheel]
 build-verbosity = "1"
 # Before building the wheel, we need to build the C++ dependencies
-before-all = "cd libsession-util && bash build.sh"
-# On Windows, we might need different logic, but let's start with this
+# Handled in .github/workflows/wheels.yml
 test-command = "python -c \"import session_saf; print('Success')\""

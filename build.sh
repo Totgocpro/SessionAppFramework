@@ -19,8 +19,8 @@ echo -e "${BLUE}>>> 1. Building libsession-util local dependencies...${NC}"
 # 1. Compile libsession-util (locally if not done)
 if [ ! -d "$LIBSESSION_BUILD" ] || [ ! -f "$LIBSESSION_BUILD/src/libsession-util.a" ]; then
     echo -e "${BLUE}   > Patching libsession-util/CMakeLists.txt...${NC}"
-    # Remove/Comment out the line causing the error because libsession-util_src target doesn't exist
-    sed -i 's/target_compile_options(libsession-util_src/ # target_compile_options(libsession-util_src/' "$LIBSESSION_DIR/CMakeLists.txt"
+    # Portable patch using python
+    python3 -c "import sys; content = open('$LIBSESSION_DIR/CMakeLists.txt').read(); open('$LIBSESSION_DIR/CMakeLists.txt', 'w').write(content.replace('target_compile_options(libsession-util_src', '# target_compile_options(libsession-util_src'))"
 
     echo -e "${BLUE}   > Configuring libsession-util...${NC}"
     mkdir -p "$LIBSESSION_BUILD"
