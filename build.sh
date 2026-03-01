@@ -47,7 +47,13 @@ SPDLOG_INC="${LIBSESSION_DIR}/external/oxen-logging/spdlog/include"
 PROTO_INC="${LIBSESSION_DIR}/proto"
 
 # Collect ALL static libraries from the build folder
-LIBSESSION_LIBS=($(find "$LIBSESSION_BUILD" -name "*.a"))
+if [[ "$OSTYPE" == "msys" || "$OSTYPE" == "cygwin" ]]; then
+    # Windows/MinGW: look for .a and .lib
+    LIBSESSION_LIBS=($(find "$LIBSESSION_BUILD" -name "*.a" -o -name "*.lib"))
+else
+    # Linux/Mac
+    LIBSESSION_LIBS=($(find "$LIBSESSION_BUILD" -name "*.a"))
+fi
 LIBSESSION_LIBS_STR=$(IFS=';'; echo "${LIBSESSION_LIBS[*]}")
 
 mkdir -p "$BUILD_DIR"

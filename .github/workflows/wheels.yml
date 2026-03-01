@@ -2,11 +2,11 @@ name: Build and Upload Wheels
 
 on:
   push:
-    branches: [ master ]
+    branches: [ main ]
     tags:
       - 'v*'
   pull_request:
-    branches: [ master ]
+    branches: [ main ]
   workflow_dispatch:
 
 jobs:
@@ -22,12 +22,30 @@ jobs:
         with:
           submodules: recursive
 
+      # Setup MSYS2 for Windows to get g++ and unix tools
+      - name: Setup MSYS2
+        if: runner.os == 'Windows'
+        uses: msys2/setup-msys2@v2
+        with:
+          msystem: MINGW64
+          update: true
+          install: >-
+            mingw-w64-x86_64-gcc
+            mingw-w64-x86_64-cmake
+            mingw-w64-x86_64-ninja
+            mingw-w64-x86_64-openssl
+            mingw-w64-x86_64-curl
+            mingw-w64-x86_64-libsodium
+            mingw-w64-x86_64-protobuf
+
       - name: Build wheels
         uses: pypa/cibuildwheel@v2.21.3
         env:
+          # On Windows, we tell cibuildwheel to use the MSYS2 environment
           CIBW_BEFORE_ALL_LINUX: "bash build.sh"
           CIBW_BEFORE_ALL_MACOS: "bash build.sh"
-          CIBW_BEFORE_ALL_WINDOWS: "build.bat"
+          CIBW_BEFORE_ALL_WINDOWS: "bash build.sh"
+          CIBW_ENVIRONMENT_WINDOWS: "PATH=/c/msys64/mingw64/bin:/usr/bin:$PATH CC=gcc CXX=g++"
           CIBW_BUILD_VERBOSITY: 1
           CIBW_TEST_COMMAND: "python -c \"import session_saf; print('Success')\""
 
