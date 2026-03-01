@@ -43,7 +43,7 @@ jobs:
         env:
           CIBW_BEFORE_ALL_LINUX: "bash build.sh"
           CIBW_BEFORE_ALL_MACOS: "bash build.sh"
-          CIBW_BEFORE_ALL_WINDOWS: "msys2 {0} build.sh"
+          CIBW_BEFORE_ALL_WINDOWS: "msys2 -c './build.sh'"
           CIBW_ENVIRONMENT_WINDOWS: "PATH=/c/msys64/mingw64/bin:/usr/bin:$PATH CC=gcc CXX=g++"
           CIBW_BUILD_VERBOSITY: 1
           CIBW_TEST_COMMAND: "python -c \"import session_saf; print('Success')\""
