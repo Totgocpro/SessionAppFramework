@@ -30,12 +30,42 @@ if(NOT WIN32)
 endif()
 
 # libsession-util  (must be installed or provided via -DLIBSESSION_ROOT=...)
-if(DEFINED LIBSESSION_ROOT)
+if(NOT LIBSESSION_FOUND AND NOT LIBSESSION_INCLUDE_DIRS)
+    set(LOCAL_LIBSESSION_DIR "${CMAKE_CURRENT_SOURCE_DIR}/libsession-util")
+    if(EXISTS "${LOCAL_LIBSESSION_DIR}/include/session/config/user_profile.hpp")
+        message(STATUS "Found local libsession-util source directory")
+        set(LIBSESSION_ROOT "${LOCAL_LIBSESSION_DIR}")
+        set(LIBSESSION_BUILD_DIR "${LOCAL_LIBSESSION_DIR}/Build")
+        
+        set(OXENC_INC "${LOCAL_LIBSESSION_DIR}/external/oxen-libquic/external/oxen-encoding")
+        set(FMT_INC "${LOCAL_LIBSESSION_DIR}/external/oxen-logging/fmt/include")
+        set(SPDLOG_INC "${LOCAL_LIBSESSION_DIR}/external/oxen-logging/spdlog/include")
+        set(PROTO_INC "${LOCAL_LIBSESSION_DIR}/proto")
+        
+        set(LIBSESSION_INCLUDE_DIRS 
+            "${LOCAL_LIBSESSION_DIR}/include"
+            "${OXENC_INC}"
+            "${FMT_INC}"
+            "${SPDLOG_INC}"
+            "${PROTO_INC}"
+        )
+        
+        # Look for libraries in Build folder
+        file(GLOB_RECURSE FOUND_LIBS 
+            "${LIBSESSION_BUILD_DIR}/*.a"
+            "${LIBSESSION_BUILD_DIR}/*.lib"
+        )
+        set(LIBSESSION_LIBRARIES "${FOUND_LIBS}")
+        set(LIBSESSION_FOUND TRUE)
+    endif()
+endif()
+
+if(DEFINED LIBSESSION_ROOT AND NOT LIBSESSION_FOUND)
     list(PREPEND CMAKE_PREFIX_PATH "${LIBSESSION_ROOT}")
 endif()
 
 # Try pkg-config first (if available), then manual path
-if(PKG_CONFIG_FOUND)
+if(PKG_CONFIG_FOUND AND NOT LIBSESSION_FOUND)
     pkg_check_modules(LIBSESSION libsession-util)
 endif()
 
