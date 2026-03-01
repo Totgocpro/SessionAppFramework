@@ -62,7 +62,6 @@ if(NOT LIBSESSION_FOUND AND NOT LIBSESSION_INCLUDE_DIRS)
         )
         
         # Look for libraries in Build folder
-        # On Windows/MinGW, files might be named libsession-util.a or session-util.lib
         file(GLOB_RECURSE FOUND_LIBS 
             "${LIBSESSION_BUILD_DIR}/*.a"
             "${LIBSESSION_BUILD_DIR}/*.lib"
@@ -70,7 +69,6 @@ if(NOT LIBSESSION_FOUND AND NOT LIBSESSION_INCLUDE_DIRS)
         
         set(LIBSESSION_LIBRARIES "")
         foreach(LIB_PATH ${FOUND_LIBS})
-            # Skip some internal cmake artifacts that might match .a
             if(NOT LIB_PATH MATCHES "CMakeLTOTest")
                 file(TO_CMAKE_PATH "${LIB_PATH}" CLEAN_LIB_PATH)
                 list(APPEND LIBSESSION_LIBRARIES "${CLEAN_LIB_PATH}")
@@ -99,7 +97,7 @@ if(NOT LIBSESSION_FOUND)
         REQUIRED)
 endif()
 
-# libcurl (HTTP for swarm communication)
+# libcurl
 find_package(CURL QUIET)
 if(NOT CURL_FOUND)
     message(STATUS "CURL not found, downloading...")
@@ -120,7 +118,7 @@ if(NOT CURL_FOUND)
     set(CURL_INCLUDE_DIRS "${CURL_SOURCE_DIR}/include" "${CURL_BINARY_DIR}/include/curl")
 endif()
 
-# nlohmann/json (JSON parsing for Session Node responses)
+# nlohmann/json
 find_package(nlohmann_json QUIET)
 if(NOT nlohmann_json_FOUND)
     include(FetchContent)
@@ -200,37 +198,29 @@ target_link_libraries(SessionAppFramework
         ${CURL_LIBRARIES}
 )
 
-# Handle system dependencies for libsession-util when not bundled (e.g., on Windows/MinGW)
-if(WIN32 OR MINGW)
-    if(PKG_CONFIG_FOUND)
-        pkg_check_modules(PROTOBUF_LITE protobuf-lite IMPORTED_TARGET)
-        if(PROTOBUF_LITE_FOUND)
-            target_link_libraries(SessionAppFramework PRIVATE PkgConfig::PROTOBUF_LITE)
-        else()
-            find_package(Protobuf QUIET)
-            if(Protobuf_FOUND)
-                if(TARGET Protobuf::libprotobuf-lite)
-                    target_link_libraries(SessionAppFramework PRIVATE Protobuf::libprotobuf-lite)
-                else()
-                    target_link_libraries(SessionAppFramework PRIVATE Protobuf::libprotobuf)
-                endif()
-            endif()
-        endif()
-
-        if(SAF_ENABLE_ONION)
-            pkg_check_modules(NETTLE nettle IMPORTED_TARGET)
-            if(NETTLE_FOUND)
-                target_link_libraries(SessionAppFramework PRIVATE PkgConfig::NETTLE)
-            endif()
-        endif()
+# ─────────────────────────────────────────────────────────
+# System Dependencies (Protobuf, Sodium, etc.)
+# ─────────────────────────────────────────────────────────
+# Always try to find these if we are not in a fully bundled static build
+find_package(Protobuf QUIET)
+if(Protobuf_FOUND)
+    if(TARGET Protobuf::libprotobuf-lite)
+        target_link_libraries(SessionAppFramework PRIVATE Protobuf::libprotobuf-lite)
     else()
-        find_package(Protobuf QUIET)
-        if(Protobuf_FOUND)
-            if(TARGET Protobuf::libprotobuf-lite)
-                target_link_libraries(SessionAppFramework PRIVATE Protobuf::libprotobuf-lite)
-            else()
-                target_link_libraries(SessionAppFramework PRIVATE Protobuf::libprotobuf)
-            endif()
+        target_link_libraries(SessionAppFramework PRIVATE Protobuf::libprotobuf)
+    endif()
+endif()
+
+if(PKG_CONFIG_FOUND)
+    pkg_check_modules(SODIUM libsodium IMPORTED_TARGET)
+    if(SODIUM_FOUND)
+        target_link_libraries(SessionAppFramework PRIVATE PkgConfig::SODIUM)
+    endif()
+    
+    if(SAF_ENABLE_ONION)
+        pkg_check_modules(NETTLE nettle IMPORTED_TARGET)
+        if(NETTLE_FOUND)
+            target_link_libraries(SessionAppFramework PRIVATE PkgConfig::NETTLE)
         endif()
     endif()
 endif()
@@ -240,41 +230,26 @@ if(SAF_ENABLE_ONION)
 endif()
 
 # ─────────────────────────────────────────────────────────
-# Examples
+# Examples / Tests / Install / Python
 # ─────────────────────────────────────────────────────────
 if(SAF_BUILD_EXAMPLES)
     add_subdirectory(examples)
 endif()
 
-# ─────────────────────────────────────────────────────────
-# Tests
-# ─────────────────────────────────────────────────────────
 if(SAF_BUILD_TESTS)
     enable_testing()
     add_subdirectory(tests)
 endif()
 
-# ─────────────────────────────────────────────────────────
-# Install rules
-# ─────────────────────────────────────────────────────────
 include(GNUInstallDirs)
 include(CMakePackageConfigHelpers)
 
-# ─────────────────────────────────────────────────────────
-# Python Bindings (Optional)
-# ─────────────────────────────────────────────────────────
 option(SAF_BUILD_PYTHON "Build Python bindings" OFF)
-
 if(SAF_BUILD_PYTHON)
     find_package(pybind11 REQUIRED)
     pybind11_add_module(session_saf python/bindings.cpp)
     target_link_libraries(session_saf PRIVATE SAF::SessionAppFramework)
-    
-    # REQUIRED for scikit-build-core to include the module in the wheel
-    install(TARGETS session_saf 
-            LIBRARY DESTINATION .
-            RUNTIME DESTINATION .
-            COMPONENT python_modules)
+    install(TARGETS session_saf LIBRARY DESTINATION . RUNTIME DESTINATION . COMPONENT python_modules)
 endif()
 
 install(TARGETS SessionAppFramework EXPORT SessionAppFrameworkTargets
@@ -283,9 +258,7 @@ install(TARGETS SessionAppFramework EXPORT SessionAppFrameworkTargets
     RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
 )
 
-install(DIRECTORY include/SessionAppFramework
-    DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}
-)
+install(DIRECTORY include/SessionAppFramework DESTINATION ${CMAKE_INSTALL_INCLUDEDIR})
 
 install(EXPORT SessionAppFrameworkTargets
     FILE SessionAppFrameworkTargets.cmake
