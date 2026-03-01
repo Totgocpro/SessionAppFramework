@@ -27,7 +27,7 @@ jobs:
           CIBW_BEFORE_ALL_LINUX: "bash build.sh"
           CIBW_BEFORE_ALL_WINDOWS: "build.bat"
           CIBW_BUILD_VERBOSITY: 1
-          CIBW_TEST_COMMAND: "python -c 'import session_saf; print("Success")'"
+          CIBW_TEST_COMMAND: "python -c \"import session_saf; print('Success')\""
 
       - uses: actions/upload-artifact@v4
         with:
