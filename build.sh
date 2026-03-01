@@ -32,31 +32,29 @@ echo ">>> 1. Building libsession-util local dependencies..."
 
 BUILD_STATIC_DEPS="ON"
 STATIC_BUNDLE="ON"
-if [[ "$OSTYPE" == "msys" || "$OSTYPE" == "cygwin" ]]; then
-    # On Windows/MSYS2, building static deps from source via libsession-util is broken
-    # because it tries to run ./configure scripts using cmd.exe.
-    # We use system packages instead.
+if [[ "$OSTYPE" == "msys" || "$OSTYPE" == "cygwin" ]] || [[ "${SAF_USE_SYSTEM_DEPS:-}" == "ON" ]]; then
+    # On Windows/MSYS2, building static deps from source via libsession-util is broken.
+    # On Linux CI, we prefer system deps to speed up the build.
     BUILD_STATIC_DEPS="OFF"
-    # Static bundle might not work well with system packages on Windows
     STATIC_BUNDLE="OFF"
 
-    # Force regeneration of proto files to avoid version mismatch with MSYS2 protobuf
-    echo "   > Regenerating proto files using system protoc..."
-    # We need to be in the proto directory to run protoc effectively as per their custom target
-    (cd libsession-util/proto && protoc --cpp_out=. SessionProtos.proto WebSocketResources.proto)
+    if [[ "$OSTYPE" == "msys" || "$OSTYPE" == "cygwin" ]]; then
+        # Force regeneration of proto files to avoid version mismatch with MSYS2 protobuf
+        echo "   > Regenerating proto files using system protoc..."
+        (cd libsession-util/proto && protoc --cpp_out=. SessionProtos.proto WebSocketResources.proto)
+    fi
 fi
 
 if [ ! -f "libsession-util/CMakeLists.txt" ]; then
     echo "❌ Error: libsession-util/CMakeLists.txt not found!"
-    echo "Current directory content:"
     ls -F
     exit 1
 fi
 
-# Always try to patch to be safe - using relative path for Windows compatibility
+# Always try to patch to be safe
 $PYTHON -c "import sys; content = open('libsession-util/CMakeLists.txt').read(); open('libsession-util/CMakeLists.txt', 'w').write(content.replace('target_compile_options(libsession-util_src', '# target_compile_options(libsession-util_src'))"
 
-if [ ! -d "$LIBSESSION_BUILD" ] || [ ! -f "$LIBSESSION_BUILD/src/libsession-util.a" ]; then
+if [ ! -d "$LIBSESSION_BUILD" ] || [ ! -f "$LIBSESSION_BUILD/src/libsession-util.a" ] || [ ! -f "$LIBSESSION_BUILD/src/libsession-crypto.a" ]; then
     echo "   > Configuring libsession-util..."
     mkdir -p "$LIBSESSION_BUILD"
     cmake -G "${GENERATOR}" -S "$LIBSESSION_DIR" -B "$LIBSESSION_BUILD" \
@@ -69,6 +67,11 @@ if [ ! -d "$LIBSESSION_BUILD" ] || [ ! -f "$LIBSESSION_BUILD/src/libsession-util
     cmake --build "$LIBSESSION_BUILD" --parallel
 else
     echo "   > libsession-util already built."
+fi
+
+if [[ "${SAF_SKIP_MAIN_BUILD:-}" == "ON" ]]; then
+    echo ">>> Skipping SessionAppFramework main build as requested (SAF_SKIP_MAIN_BUILD=ON)"
+    exit 0
 fi
 
 echo ">>> 2. Configuring SessionAppFramework..."

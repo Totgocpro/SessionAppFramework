@@ -29,6 +29,7 @@ jobs:
         with:
           msystem: MINGW64
           update: true
+          path-type: inherit
           install: >-
             mingw-w64-x86_64-gcc
             mingw-w64-x86_64-cmake
@@ -52,10 +53,14 @@ jobs:
       - name: Build wheels
         uses: pypa/cibuildwheel@v2.21.3
         env:
-          CIBW_BEFORE_ALL_LINUX: "bash build.sh"
+          CIBW_BEFORE_ALL_LINUX: >
+            (yum install -y libsodium-devel protobuf-devel curl-devel openssl-devel libevent-devel nettle-devel gmp-devel libidn2-devel libunistring-devel libtasn1-devel gnutls-devel zstd-devel pkgconfig || 
+             dnf install -y libsodium-devel protobuf-devel curl-devel openssl-devel libevent-devel nettle-devel gmp-devel libidn2-devel libunistring-devel libtasn1-devel gnutls-devel zstd-devel pkgconfig || 
+             (apt-get update && apt-get install -y libsodium-dev libprotobuf-dev protobuf-compiler libcurl4-openssl-dev libssl-dev libevent-dev libnettle-dev libgmp-dev libidn2-dev libunistring-dev libtasn1-6-dev libgnutls28-dev libzstd-dev pkg-config)) &&
+            SAF_USE_SYSTEM_DEPS=ON SAF_SKIP_MAIN_BUILD=ON bash build.sh
           CIBW_BEFORE_ALL_MACOS: "bash build.sh"
           CIBW_BEFORE_ALL_WINDOWS: "msys2 -c './build.sh'"
-          CIBW_ENVIRONMENT_WINDOWS: "PATH=/c/msys64/mingw64/bin:/usr/bin:$PATH CC=gcc CXX=g++"
+          CIBW_ENVIRONMENT_WINDOWS: "CC=gcc CXX=g++ CMAKE_GENERATOR=Ninja"
           CIBW_BUILD_VERBOSITY: 1
           CIBW_TEST_COMMAND: "python -c \"import session_saf; print('Success')\""
 

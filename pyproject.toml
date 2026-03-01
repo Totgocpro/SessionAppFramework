@@ -36,6 +36,6 @@ install.components = ["python_modules"]
 
 [tool.cibuildwheel]
 build-verbosity = "1"
-# Skip Python 3.8 as it is reaching EOL and causing build issues on Windows
-skip = "cp38-*"
+# Skip Python 3.8 and 32-bit Windows, and musllinux (too complex for static deps)
+skip = ["cp38-*", "*-win32", "*-musllinux_*"]
 test-command = "python -c \"import session_saf; print('Success')\""
