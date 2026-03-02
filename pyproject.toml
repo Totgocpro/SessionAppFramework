@@ -66,6 +66,7 @@ fi) && bash build.sh
 
 [tool.cibuildwheel.macos]
 before-all = "rm -rf libsession-util/Build Build/ && brew install openssl libsodium curl protobuf nettle gmp libev zstd pkg-config && bash build.sh"
+environment = { MACOSX_DEPLOYMENT_TARGET="15.0", SAF_USE_SYSTEM_DEPS="ON", SAF_SKIP_MAIN_BUILD="ON", SAF_ENABLE_ONION="OFF" }
 
 [tool.cibuildwheel.windows]
 before-all = "C:\\msys64\\usr\\bin\\bash.exe -lc \"rm -rf libsession-util/Build Build/ && bash build.sh\""
