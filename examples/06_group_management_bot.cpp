@@ -137,7 +137,7 @@ int main(int argc, char** argv) {
         std::cout << "[REACT] " << context << reactor.GetId() 
                   << (added ? " added " : " removed ") << emoji 
                   << " on message " << target.GetId() << "\n";
-        target.Reply("Tu a réagie au message avec " + emoji);
+        target.Reply("You reacted to the message with " + emoji);
     });
 
     client.Start();

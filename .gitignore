@@ -18,6 +18,7 @@ lib/
 wheelhouse/
 dist/
 *.whl
+__pycache__/
 
 # Session-specific temporary files
 messages.db

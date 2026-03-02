@@ -1,10 +1,12 @@
 [build-system]
 requires = ["scikit-build-core>=0.10", "pybind11"]
-build-backend = "scikit_build_core.build"
+build-backend = "builder"
+backend-path = ["."]
 
 [project]
 name = "session-saf"
-version = "1.0.0"
+version = "1.2.22"
+
 description = "High-level Python bindings for SessionAppFramework"
 readme = "README.md"
 requires-python = ">=3.9"
@@ -30,44 +32,14 @@ classifiers = [
 cmake.args = [
     "-DSAF_BUILD_PYTHON=ON",
     "-DSAF_BUILD_EXAMPLES=OFF",
-    "-DSAF_ENABLE_ONION=OFF",
     "-DCMAKE_POSITION_INDEPENDENT_CODE=ON"
 ]
+# Keep sdist small, dependencies will be cloned during build if missing
+sdist.exclude = ["libsession-util/**", "Build/**", ".venv*/**"]
 
 [tool.cibuildwheel]
-build-verbosity = "1"
-# Skip Python 3.8 and 32-bit Windows, and musllinux (too complex for static deps)
-skip = ["cp38-*", "*-win32", "*-musllinux_*"]
-test-command = "python -c \"import session_saf; print('Success')\""
-manylinux-x86_64-image = "manylinux_2_28"
-manylinux-aarch64-image = "manylinux_2_28"
-
-[tool.cibuildwheel.environment]
-SAF_USE_SYSTEM_DEPS = "ON"
-SAF_SKIP_MAIN_BUILD = "ON"
-SAF_ENABLE_ONION = "OFF"
-
-[tool.cibuildwheel.linux]
-before-all = """
-rm -rf libsession-util/Build Build/ &&
-(if command -v dnf; then
-  dnf install -y epel-release &&
-  (dnf config-manager --set-enabled powertools || dnf config-manager --set-enabled crb || true) &&
-  dnf install -y protobuf-devel protobuf-compiler curl-devel openssl-devel nettle-devel gmp-devel libev-devel libsodium-devel libzstd-devel pkgconfig;
-elif command -v yum; then 
-  yum install -y epel-release &&
-  yum install -y 'dnf-command(config-manager)' &&
-  (yum config-manager --set-enabled powertools || yum config-manager --set-enabled crb || true) &&
-  yum install -y protobuf-devel protobuf-compiler curl-devel openssl-devel nettle-devel gmp-devel libev-devel libsodium-devel libzstd-devel pkgconfig;
-elif command -v apt-get; then
-  apt-get update && apt-get install -y libprotobuf-dev protobuf-compiler libcurl4-openssl-dev libssl-dev libnettle-dev libgmp-dev libev-dev libsodium-dev libzstd-dev pkg-config;
-fi) && bash build.sh
-"""
-
-[tool.cibuildwheel.macos]
-before-all = "rm -rf libsession-util/Build Build/ && brew install openssl libsodium curl protobuf nettle gmp libev zstd pkg-config && bash build.sh"
-environment = { MACOSX_DEPLOYMENT_TARGET="15.0", SAF_USE_SYSTEM_DEPS="ON", SAF_SKIP_MAIN_BUILD="ON", SAF_ENABLE_ONION="OFF" }
-
-[tool.cibuildwheel.windows]
-before-all = "C:\\msys64\\usr\\bin\\bash.exe -lc \"rm -rf libsession-util/Build Build/ && bash build.sh\""
-environment = { MSYSTEM="MINGW64", CHERE_INVOKING="1", PATH="C:/msys64/mingw64/bin;C:/msys64/usr/bin;$PATH", CC="gcc", CXX="g++", CMAKE_GENERATOR="Ninja", OPENSSL_ROOT_DIR="C:/msys64/mingw64", SAF_USE_SYSTEM_DEPS="ON", SAF_SKIP_MAIN_BUILD="ON", SAF_ENABLE_ONION="OFF" }
+# This section is ignored by standard pip install, but scikit-build-core 
+# can use before-all in some contexts. However, for a simple sdist, 
+# we need to make sure build.sh is run.
+# Standard pip install will run the build backend which triggers CMake.
+# We'll use a CMake hook or just ensure build.sh runs.
