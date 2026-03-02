@@ -22,7 +22,7 @@ jobs:
         with:
           submodules: recursive
 
-      # Setup MSYS2 for Windows to get g++ and unix tools
+      # Setup MSYS2 for Windows
       - name: Setup MSYS2
         if: runner.os == 'Windows'
         uses: msys2/setup-msys2@v2
@@ -52,28 +52,6 @@ jobs:
 
       - name: Build wheels
         uses: pypa/cibuildwheel@v2.21.3
-        env:
-          CIBW_BEFORE_ALL_LINUX: >
-            (if command -v dnf; then
-              dnf install -y epel-release &&
-              (dnf config-manager --set-enabled powertools || dnf config-manager --set-enabled crb || true) &&
-              dnf install -y protobuf-devel protobuf-compiler curl-devel openssl-devel nettle-devel gmp-devel libev-devel libsodium-devel libzstd-devel pkgconfig;
-            elif command -v yum; then 
-              yum install -y epel-release &&
-              yum install -y 'dnf-command(config-manager)' &&
-              (yum config-manager --set-enabled powertools || yum config-manager --set-enabled crb || true) &&
-              yum install -y protobuf-devel protobuf-compiler curl-devel openssl-devel nettle-devel gmp-devel libev-devel libsodium-devel libzstd-devel pkgconfig;
-            elif command -v apt-get; then
-              apt-get update && apt-get install -y libprotobuf-dev protobuf-compiler libcurl4-openssl-dev libssl-dev libnettle-dev libgmp-dev libev-dev libsodium-dev libzstd-dev pkg-config;
-            fi) &&
-            SAF_USE_SYSTEM_DEPS=ON SAF_SKIP_MAIN_BUILD=ON SAF_ENABLE_ONION=OFF bash build.sh
-          CIBW_BEFORE_ALL_MACOS: >
-            brew install openssl libsodium curl protobuf nettle gmp libev zstd pkg-config &&
-            SAF_USE_SYSTEM_DEPS=ON SAF_SKIP_MAIN_BUILD=ON SAF_ENABLE_ONION=OFF bash build.sh
-          CIBW_BEFORE_ALL_WINDOWS: "msys2 -c 'SAF_USE_SYSTEM_DEPS=ON SAF_SKIP_MAIN_BUILD=ON SAF_ENABLE_ONION=OFF ./build.sh'"
-          CIBW_ENVIRONMENT_WINDOWS: "CC=gcc CXX=g++ CMAKE_GENERATOR=Ninja OPENSSL_ROOT_DIR='C:/msys64/mingw64' PATH='C:/msys64/mingw64/bin;C:/msys64/usr/bin;$PATH'"
-          CIBW_BUILD_VERBOSITY: 1
-          CIBW_TEST_COMMAND: "python -c \"import session_saf; print('Success')\""
 
       - uses: actions/upload-artifact@v4
         with:

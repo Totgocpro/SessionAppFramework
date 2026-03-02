@@ -41,3 +41,32 @@ skip = ["cp38-*", "*-win32", "*-musllinux_*"]
 test-command = "python -c \"import session_saf; print('Success')\""
 manylinux-x86_64-image = "manylinux_2_28"
 manylinux-aarch64-image = "manylinux_2_28"
+
+[tool.cibuildwheel.environment]
+SAF_USE_SYSTEM_DEPS = "ON"
+SAF_SKIP_MAIN_BUILD = "ON"
+SAF_ENABLE_ONION = "OFF"
+
+[tool.cibuildwheel.linux]
+before-all = """
+rm -rf libsession-util/Build Build/ &&
+(if command -v dnf; then
+  dnf install -y epel-release &&
+  (dnf config-manager --set-enabled powertools || dnf config-manager --set-enabled crb || true) &&
+  dnf install -y protobuf-devel protobuf-compiler curl-devel openssl-devel nettle-devel gmp-devel libev-devel libsodium-devel libzstd-devel pkgconfig;
+elif command -v yum; then 
+  yum install -y epel-release &&
+  yum install -y 'dnf-command(config-manager)' &&
+  (yum config-manager --set-enabled powertools || yum config-manager --set-enabled crb || true) &&
+  yum install -y protobuf-devel protobuf-compiler curl-devel openssl-devel nettle-devel gmp-devel libev-devel libsodium-devel libzstd-devel pkgconfig;
+elif command -v apt-get; then
+  apt-get update && apt-get install -y libprotobuf-dev protobuf-compiler libcurl4-openssl-dev libssl-dev libnettle-dev libgmp-dev libev-dev libsodium-dev libzstd-dev pkg-config;
+fi) && bash build.sh
+"""
+
+[tool.cibuildwheel.macos]
+before-all = "rm -rf libsession-util/Build Build/ && brew install openssl libsodium curl protobuf nettle gmp libev zstd pkg-config && bash build.sh"
+
+[tool.cibuildwheel.windows]
+before-all = "C:\\msys2\\usr\\bin\\bash.exe -lc \"rm -rf libsession-util/Build Build/ && cd $GITHUB_WORKSPACE && ./build.sh\""
+environment = { CC="gcc", CXX="g++", CMAKE_GENERATOR="Ninja", OPENSSL_ROOT_DIR="C:/msys64/mingw64", SAF_USE_SYSTEM_DEPS="ON", SAF_SKIP_MAIN_BUILD="ON", SAF_ENABLE_ONION="OFF" }

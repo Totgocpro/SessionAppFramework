@@ -14,7 +14,10 @@ lib/
 *.sublime-*
 
 # Python temp files
-.venv/
+.venv*/
+wheelhouse/
+dist/
+*.whl
 
 # Session-specific temporary files
 messages.db
