@@ -68,5 +68,5 @@ fi) && bash build.sh
 before-all = "rm -rf libsession-util/Build Build/ && brew install openssl libsodium curl protobuf nettle gmp libev zstd pkg-config && bash build.sh"
 
 [tool.cibuildwheel.windows]
-before-all = "C:\\msys64\\usr\\bin\\bash.exe -lc \"rm -rf libsession-util/Build Build/ && bash build.sh\""
+before-all = "bash -c \"rm -rf libsession-util/Build Build/ && bash build.sh\""
 environment = { CC="gcc", CXX="g++", CMAKE_GENERATOR="Ninja", OPENSSL_ROOT_DIR="C:/msys64/mingw64", SAF_USE_SYSTEM_DEPS="ON", SAF_SKIP_MAIN_BUILD="ON", SAF_ENABLE_ONION="OFF" }

@@ -68,10 +68,8 @@ elif [[ "${PLATFORM}" == "macos" ]]; then
     "${CIBW_BIN}" --platform macos
 
 elif [[ "${PLATFORM}" == "windows" ]]; then
-    # On Windows, ensure standard MSYS2 is available
-    if [ ! -d "C:/msys64" ]; then
-        echo "❌ Error: MSYS2 not found at C:/msys64. Local Windows test might fail."
-    fi
+    echo ">>> 🚀 Starting GitHub Simulation for ${PLATFORM}..."
+    # On Windows, we just run it. pyproject.toml handles bash -c.
     "${CIBW_BIN}" --platform windows
 
 else
