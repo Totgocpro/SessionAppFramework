@@ -69,7 +69,8 @@ elif [[ "${PLATFORM}" == "macos" ]]; then
 
 elif [[ "${PLATFORM}" == "windows" ]]; then
     echo ">>> 🚀 Starting GitHub Simulation for ${PLATFORM}..."
-    # On Windows, we just run it. pyproject.toml handles bash -c.
+    # On Windows, we ensure the PATH is set correctly for the local shell
+    export PATH="C:/msys64/mingw64/bin:C:/msys64/usr/bin:$PATH"
     "${CIBW_BIN}" --platform windows
 
 else
