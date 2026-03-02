@@ -26,6 +26,15 @@ jobs:
         if: runner.os == 'Windows'
         run: git config --system core.longpaths true
 
+      - name: Remove Strawberry Perl
+        if: runner.os == 'Windows'
+        run: |
+          Remove-Item -Path "C:\Strawberry" -Recurse -Force -ErrorAction SilentlyContinue
+          # Remove from PATH as well
+          $path = [Environment]::GetEnvironmentVariable("Path", "Machine")
+          $path = ($path.Split(';') | Where-Object { $_ -notmatch 'Strawberry' }) -join ';'
+          [Environment]::SetEnvironmentVariable("Path", $path, "Machine")
+          
       # Setup MSYS2 for Windows
       - name: Setup MSYS2
         if: runner.os == 'Windows'

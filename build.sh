@@ -93,6 +93,8 @@ if [ ! -d "$LIBSESSION_BUILD" ] || [ ! -f "$LIBSESSION_BUILD/src/libsession-util
         POSSIBLE_PATHS=(
             "/mingw64/bin/pkgconf.exe"
             "/mingw64/bin/pkg-config.exe"
+            "C:/mingw64/bin/pkgconf.exe"
+            "C:/mingw64/bin/pkg-config.exe"
             "C:/msys64/mingw64/bin/pkgconf.exe"
             "C:/msys64/mingw64/bin/pkg-config.exe"
             "/usr/bin/pkg-config.exe"
