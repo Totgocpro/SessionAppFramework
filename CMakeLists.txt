@@ -31,8 +31,8 @@ option(SAF_ENABLE_ONION    "Enable onion-routing"   ON)
 find_package(PkgConfig QUIET)
 
 # OpenSSL
-if(WIN32 AND NOT MINGW AND NOT OPENSSL_ROOT_DIR)
-    foreach(DIR "C:/Program Files/OpenSSL-Win64" "C:/Program Files/OpenSSL" "C:/local/OpenSSL-Win64")
+if(WIN32 AND NOT OPENSSL_ROOT_DIR)
+    foreach(DIR "C:/msys64/mingw64" "C:/Program Files/OpenSSL-Win64" "C:/Program Files/OpenSSL" "C:/local/OpenSSL-Win64")
         if(EXISTS "${DIR}")
             set(OPENSSL_ROOT_DIR "${DIR}" CACHE PATH "" FORCE)
             break()

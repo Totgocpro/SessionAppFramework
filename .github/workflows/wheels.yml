@@ -71,7 +71,7 @@ jobs:
             brew install openssl libsodium curl protobuf nettle gmp libev zstd pkg-config &&
             SAF_USE_SYSTEM_DEPS=ON SAF_SKIP_MAIN_BUILD=ON SAF_ENABLE_ONION=OFF bash build.sh
           CIBW_BEFORE_ALL_WINDOWS: "msys2 -c 'SAF_USE_SYSTEM_DEPS=ON SAF_SKIP_MAIN_BUILD=ON SAF_ENABLE_ONION=OFF ./build.sh'"
-          CIBW_ENVIRONMENT_WINDOWS: "CC=gcc CXX=g++ CMAKE_GENERATOR=Ninja"
+          CIBW_ENVIRONMENT_WINDOWS: "CC=gcc CXX=g++ CMAKE_GENERATOR=Ninja OPENSSL_ROOT_DIR='C:/msys64/mingw64' PATH='C:/msys64/mingw64/bin;C:/msys64/usr/bin;$PATH'"
           CIBW_BUILD_VERBOSITY: 1
           CIBW_TEST_COMMAND: "python -c \"import session_saf; print('Success')\""
 
