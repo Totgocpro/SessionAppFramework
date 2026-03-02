@@ -48,7 +48,7 @@ jobs:
             mingw-w64-x86_64-libtasn1
             mingw-w64-x86_64-libiconv
             mingw-w64-x86_64-zstd
-            pkg-config
+            mingw-w64-x86_64-pkgconf
 
       - name: Build wheels
         uses: pypa/cibuildwheel@v2.21.3
