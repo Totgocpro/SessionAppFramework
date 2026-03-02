@@ -57,12 +57,12 @@ jobs:
             (if command -v dnf; then
               dnf install -y epel-release &&
               (dnf config-manager --set-enabled powertools || dnf config-manager --set-enabled crb || true) &&
-              dnf install -y protobuf-devel curl-devel openssl-devel nettle-devel gmp-devel libev-devel libsodium-devel libzstd-devel pkgconfig;
+              dnf install -y protobuf-devel protobuf-compiler curl-devel openssl-devel nettle-devel gmp-devel libev-devel libsodium-devel libzstd-devel pkgconfig;
             elif command -v yum; then 
               yum install -y epel-release &&
               yum install -y 'dnf-command(config-manager)' &&
               (yum config-manager --set-enabled powertools || yum config-manager --set-enabled crb || true) &&
-              yum install -y protobuf-devel curl-devel openssl-devel nettle-devel gmp-devel libev-devel libsodium-devel libzstd-devel pkgconfig;
+              yum install -y protobuf-devel protobuf-compiler curl-devel openssl-devel nettle-devel gmp-devel libev-devel libsodium-devel libzstd-devel pkgconfig;
             elif command -v apt-get; then
               apt-get update && apt-get install -y libprotobuf-dev protobuf-compiler libcurl4-openssl-dev libssl-dev libnettle-dev libgmp-dev libev-dev libsodium-dev libzstd-dev pkg-config;
             fi) &&

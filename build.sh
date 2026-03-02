@@ -36,16 +36,13 @@ ENABLE_ONIONREQ="${SAF_ENABLE_ONION:-ON}"
 
 if [[ "$OSTYPE" == "msys" || "$OSTYPE" == "cygwin" ]] || [[ "${SAF_USE_SYSTEM_DEPS:-}" == "ON" ]]; then
     # On Windows/MSYS2, building static deps from source via libsession-util is broken.
-    # On Linux CI, we prefer system deps to speed up the build.
+    # On Linux/Mac CI, we prefer system deps to speed up the build.
     BUILD_STATIC_DEPS="OFF"
     STATIC_BUNDLE="OFF"
 
-    if [[ "$OSTYPE" == "msys" || "$OSTYPE" == "cygwin" ]]; then
-        # Force regeneration of proto files to avoid version mismatch with MSYS2 protobuf
-        # ONLY on Windows. On Linux, we use the pre-generated ones to avoid mismatch with submodule headers.
-        echo "   > Regenerating proto files using system protoc (MSYS2)..."
-        (cd libsession-util/proto && protoc --cpp_out=. SessionProtos.proto WebSocketResources.proto)
-    fi
+    # Force regeneration of proto files to avoid version mismatch with system protobuf
+    echo "   > Regenerating proto files using system protoc..."
+    (cd libsession-util/proto && protoc --cpp_out=. SessionProtos.proto WebSocketResources.proto)
 fi
 
 if [ ! -f "libsession-util/CMakeLists.txt" ]; then

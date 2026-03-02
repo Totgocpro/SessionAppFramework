@@ -16,6 +16,12 @@ pip install pybind11 --quiet
 LIBSESSION_BUILD="libsession-util/Build"
 if [ ! -f "$LIBSESSION_BUILD/src/libsession-util.a" ]; then
     echo ">>> Building libsession-util submodule..."
+    
+    if [[ "${SAF_USE_SYSTEM_DEPS:-}" == "ON" ]]; then
+        echo "   > Regenerating proto files using system protoc..."
+        (cd libsession-util/proto && protoc --cpp_out=. SessionProtos.proto WebSocketResources.proto)
+    fi
+
     cd libsession-util
     ./build.sh
     cd ..
