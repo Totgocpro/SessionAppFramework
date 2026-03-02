@@ -75,7 +75,8 @@ fi
 
 # Always try to patch to be safe
 echo "   > Patching libsession-util/CMakeLists.txt..."
-sed -i 's/target_compile_options(libsession-util_src/# target_compile_options(libsession-util_src/g' libsession-util/CMakeLists.txt
+# Use a portable sed command (works on BSD/macOS and GNU/Linux)
+sed -i.bak 's/target_compile_options(libsession-util_src/# target_compile_options(libsession-util_src/g' libsession-util/CMakeLists.txt && rm -f libsession-util/CMakeLists.txt.bak
 
 if [ ! -d "$LIBSESSION_BUILD" ] || [ ! -f "$LIBSESSION_BUILD/src/libsession-util.a" ] || [ ! -f "$LIBSESSION_BUILD/src/libsession-crypto.a" ]; then
     echo "   > Configuring libsession-util..."
