@@ -12,7 +12,7 @@ set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 if(CMAKE_CXX_COMPILER_ID MATCHES "GNU")
     add_compile_options(-Wno-stringop-overflow -Wno-stringop-overread)
     add_link_options(-Wno-stringop-overflow)
-elseif(CMAKE_CXX_COMPILER_ID MATCHES "Clang" AND NOT APPLE)
+elseif(CMAKE_CXX_COMPILER_ID MATCHES "Clang" AND NOT APPLE AND NOT CMAKE_CXX_COMPILER_ID STREQUAL "AppleClang")
     add_compile_options(-Wno-stringop-overflow -Wno-stringop-overread)
     add_link_options(-Wno-stringop-overflow)
 endif()
@@ -142,11 +142,13 @@ target_link_libraries(SessionAppFramework
         OpenSSL::Crypto
     PRIVATE
         $<BUILD_INTERFACE:nlohmann_json::nlohmann_json>
-        -Wl,--start-group
-        ${LIBSESSION_LIBRARIES}
-        -Wl,--end-group
-        ${CURL_LIBRARIES}
 )
+
+if(APPLE)
+    target_link_libraries(SessionAppFramework PRIVATE ${LIBSESSION_LIBRARIES} ${CURL_LIBRARIES})
+else()
+    target_link_libraries(SessionAppFramework PRIVATE -Wl,--start-group ${LIBSESSION_LIBRARIES} -Wl,--end-group ${CURL_LIBRARIES})
+endif()
 
 # ─────────────────────────────────────────────────────────
 # System Dependencies (Protobuf, Sodium, etc.)
