@@ -219,10 +219,12 @@ include(CMakePackageConfigHelpers)
 
 option(SAF_BUILD_PYTHON "Build Python bindings" OFF)
 if(SAF_BUILD_PYTHON)
+    message(STATUS "Building Python bindings (session_saf)...")
     find_package(pybind11 REQUIRED)
     pybind11_add_module(session_saf python/bindings.cpp)
     target_link_libraries(session_saf PRIVATE SAF::SessionAppFramework)
-    install(TARGETS session_saf LIBRARY DESTINATION . RUNTIME DESTINATION . COMPONENT python_modules)
+    set_target_properties(session_saf PROPERTIES OUTPUT_NAME "session_saf")
+    install(TARGETS session_saf DESTINATION .)
 endif()
 
 install(TARGETS SessionAppFramework EXPORT SessionAppFrameworkTargets ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR} LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR} RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})

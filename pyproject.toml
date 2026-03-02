@@ -30,9 +30,9 @@ classifiers = [
 cmake.args = [
     "-DSAF_BUILD_PYTHON=ON",
     "-DSAF_BUILD_EXAMPLES=OFF",
+    "-DSAF_ENABLE_ONION=OFF",
     "-DCMAKE_POSITION_INDEPENDENT_CODE=ON"
 ]
-install.components = ["python_modules"]
 
 [tool.cibuildwheel]
 build-verbosity = "1"
