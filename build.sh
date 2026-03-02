@@ -83,7 +83,18 @@ if [ ! -d "$LIBSESSION_BUILD" ] || [ ! -f "$LIBSESSION_BUILD/src/libsession-util
         EXTRA_FLAGS="-Wno-stringop-overflow"
     fi
 
+    # Explicitly find pkg-config on Windows to avoid CMake errors
+    CMAKE_EXTRA_ARGS=""
+    if [[ "$OSTYPE" == "msys" || "$OSTYPE" == "cygwin" ]]; then
+        if command -v pkg-config >/dev/null 2>&1; then
+            CMAKE_EXTRA_ARGS="-DPKG_CONFIG_EXECUTABLE=$(command -v pkg-config)"
+        elif command -v pkgconf >/dev/null 2>&1; then
+            CMAKE_EXTRA_ARGS="-DPKG_CONFIG_EXECUTABLE=$(command -v pkgconf)"
+        fi
+    fi
+
     cmake -G "${GENERATOR}" -S "$LIBSESSION_DIR" -B "$LIBSESSION_BUILD" \
+          ${CMAKE_EXTRA_ARGS} \
           -D STATIC_BUNDLE="${STATIC_BUNDLE}" \
           -D BUILD_STATIC_DEPS="${BUILD_STATIC_DEPS}" \
           -D ENABLE_ONIONREQ="${ENABLE_ONIONREQ}" \

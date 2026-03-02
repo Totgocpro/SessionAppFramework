@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
 # ─────────────────────────────────────────────────────────
-# test_wheels_local.sh - Run cibuildwheel locally for testing
+# test_wheels_local.sh - GitHub Actions Simulator
 # ─────────────────────────────────────────────────────────
 set -euo pipefail
 
-echo ">>> Detecting platform..."
+echo ">>> 🔍 Detecting platform..."
 OS_NAME=$(uname -s)
 PLATFORM=""
 
@@ -15,17 +15,18 @@ case "${OS_NAME}" in
     *)          PLATFORM="unknown";;
 esac
 
-echo ">>> Platform: ${PLATFORM}"
+echo ">>> 💻 Platform: ${PLATFORM}"
 
-# Clean up leftover binaries that might confuse auditwheel
-echo ">>> Cleaning up previous build artifacts..."
+# 1. Clean environment (Crucial for GitHub Simulation)
+echo ">>> 🧹 Cleaning up previous build artifacts (LTO & auditwheel safety)..."
 rm -f *.so *.dylib *.dll
+rm -rf Build/ libsession-util/Build/ wheelhouse/
 
-# Handle externally managed environments by using a dedicated venv for the tool
+# 2. Setup Virtual Environment for cibuildwheel
 CIBW_BIN="cibuildwheel"
 if ! command -v cibuildwheel &> /dev/null; then
     if [ ! -d ".venv-cibw" ]; then
-        echo ">>> cibuildwheel not found. Creating a local venv for it..."
+        echo ">>> 📦 cibuildwheel not found. Creating a local venv for it..."
         python3 -m venv .venv-cibw
         .venv-cibw/bin/pip install cibuildwheel
     fi
@@ -34,42 +35,48 @@ else
     CIBW_BIN=$(command -v cibuildwheel)
 fi
 
+# 3. GitHub Environment Simulation
+# These variables match exactly what we set in wheels.yml
+export CIBW_BUILD_VERBOSITY=1
+export SAF_USE_SYSTEM_DEPS=ON
+export SAF_SKIP_MAIN_BUILD=ON
+export SAF_ENABLE_ONION=OFF
+
+echo ">>> 🚀 Starting GitHub Simulation for ${PLATFORM}..."
+
 if [[ "${PLATFORM}" == "linux" ]]; then
-    # Check for docker/podman
     CONTAINER_ENGINE=""
     USE_SUDO=""
-    
     if command -v docker &> /dev/null; then
         CONTAINER_ENGINE="docker"
-        # Check for permission denied
         if ! docker version &>/dev/null; then
-            echo ">>> Docker permission denied. I'll use sudo for the command."
-            USE_SUDO="sudo"
+            echo ">>> 🛡️ Docker permission denied. Using sudo."
+            USE_SUDO="sudo -E"
         fi
     elif command -v podman &> /dev/null; then
         CONTAINER_ENGINE="podman"
     fi
 
     if [ -z "${CONTAINER_ENGINE}" ]; then
-        echo "❌ Error: Docker or Podman is required for Linux wheel builds."
-        echo "   Please install docker ('sudo pacman -S docker') or podman ('sudo pacman -S podman')."
+        echo "❌ Error: Docker or Podman is required for Linux."
         exit 1
     fi
+    ${USE_SUDO} "${CIBW_BIN}" --platform linux
 
-    echo ">>> Running cibuildwheel for Linux using ${CONTAINER_ENGINE}..."
-    if [ -n "${USE_SUDO}" ]; then
-        # Use -E to preserve environment variables
-        sudo -E "${CIBW_BIN}" --platform linux
-    else
-        "${CIBW_BIN}" --platform linux
-    fi
 elif [[ "${PLATFORM}" == "macos" ]]; then
-    echo ">>> Running cibuildwheel for macOS..."
+    # On Mac, we just run it. pyproject.toml handles brew install.
     "${CIBW_BIN}" --platform macos
+
 elif [[ "${PLATFORM}" == "windows" ]]; then
-    echo ">>> Running cibuildwheel for Windows..."
+    # On Windows, ensure standard MSYS2 is available
+    if [ ! -d "C:/msys64" ]; then
+        echo "❌ Error: MSYS2 not found at C:/msys64. Local Windows test might fail."
+    fi
     "${CIBW_BIN}" --platform windows
+
 else
     echo "❌ Error: Unsupported platform ${OS_NAME}"
     exit 1
 fi
+
+echo "✅ Simulation finished! Check the 'wheelhouse/' directory."
