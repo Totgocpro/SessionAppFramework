@@ -52,7 +52,6 @@ if(NOT LIBSESSION_FOUND AND NOT LIBSESSION_INCLUDE_DIRS)
         set(FMT_INC "${LOCAL_LIBSESSION_DIR}/external/oxen-logging/fmt/include")
         set(SPDLOG_INC "${LOCAL_LIBSESSION_DIR}/external/oxen-logging/spdlog/include")
         set(PROTO_INC "${LOCAL_LIBSESSION_DIR}/proto")
-        set(PROTOBUF_SUB_INC "${LOCAL_LIBSESSION_DIR}/external/protobuf/src")
         
         set(LIBSESSION_INCLUDE_DIRS 
             "${LOCAL_LIBSESSION_DIR}/include" 
@@ -60,7 +59,6 @@ if(NOT LIBSESSION_FOUND AND NOT LIBSESSION_INCLUDE_DIRS)
             "${FMT_INC}" 
             "${SPDLOG_INC}" 
             "${PROTO_INC}"
-            "${PROTOBUF_SUB_INC}"
         )
         
         file(GLOB_RECURSE FOUND_LIBS "${LIBSESSION_BUILD_DIR}/*.a" "${LIBSESSION_BUILD_DIR}/*.lib")
