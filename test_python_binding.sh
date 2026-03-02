@@ -18,8 +18,21 @@ if [ ! -f "$LIBSESSION_BUILD/src/libsession-util.a" ]; then
     echo ">>> Building libsession-util submodule..."
     
     if [[ "${SAF_USE_SYSTEM_DEPS:-}" == "ON" ]]; then
-        echo "   > Regenerating proto files using system protoc..."
-        (cd libsession-util/proto && protoc --cpp_out=. SessionProtos.proto WebSocketResources.proto)
+        if command -v protoc >/dev/null 2>&1; then
+            PROTOC_VER=$(protoc --version | cut -d' ' -f2)
+            PROTOC_MAJOR=$(echo "$PROTOC_VER" | cut -d. -f1)
+            PROTOC_MINOR=$(echo "$PROTOC_VER" | cut -d. -f2)
+            
+            REGEN_REQUIRED=0
+            if [ "$PROTOC_MAJOR" -ge 21 ] || { [ "$PROTOC_MAJOR" -eq 3 ] && [ "$PROTOC_MINOR" -ge 21 ]; }; then
+                REGEN_REQUIRED=1
+            fi
+
+            if [ "$REGEN_REQUIRED" -eq 1 ]; then
+                echo "   > Regenerating proto files using system protoc ($PROTOC_VER)..."
+                (cd libsession-util/proto && protoc --cpp_out=. SessionProtos.proto WebSocketResources.proto)
+            fi
+        fi
     fi
 
     cd libsession-util

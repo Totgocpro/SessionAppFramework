@@ -40,9 +40,29 @@ if [[ "$OSTYPE" == "msys" || "$OSTYPE" == "cygwin" ]] || [[ "${SAF_USE_SYSTEM_DE
     BUILD_STATIC_DEPS="OFF"
     STATIC_BUNDLE="OFF"
 
-    # Force regeneration of proto files to avoid version mismatch with system protobuf
-    echo "   > Regenerating proto files using system protoc..."
-    (cd libsession-util/proto && protoc --cpp_out=. SessionProtos.proto WebSocketResources.proto)
+    # Force regeneration of proto files to avoid version mismatch with system protobuf,
+    # but ONLY if system protoc is new enough (>= 3.21.0).
+    # If it's too old, libsession-util will fallback to submodule + its pre-generated headers.
+    if command -v protoc >/dev/null 2>&1; then
+        PROTOC_VER=$(protoc --version | cut -d' ' -f2)
+        # Handle versions like "3.5.0" vs "33.1" (v25+)
+        PROTOC_MAJOR=$(echo "$PROTOC_VER" | cut -d. -f1)
+        PROTOC_MINOR=$(echo "$PROTOC_VER" | cut -d. -f2)
+        
+        REGEN_REQUIRED=0
+        if [[ "$OSTYPE" == "msys" || "$OSTYPE" == "cygwin" ]]; then
+            REGEN_REQUIRED=1 # Always on Windows/MSYS2
+        elif [ "$PROTOC_MAJOR" -ge 21 ] || { [ "$PROTOC_MAJOR" -eq 3 ] && [ "$PROTOC_MINOR" -ge 21 ]; }; then
+            REGEN_REQUIRED=1
+        fi
+
+        if [ "$REGEN_REQUIRED" -eq 1 ]; then
+            echo "   > Regenerating proto files using system protoc ($PROTOC_VER)..."
+            (cd libsession-util/proto && protoc --cpp_out=. SessionProtos.proto WebSocketResources.proto)
+        else
+            echo "   > System protoc ($PROTOC_VER) is too old, will use submodule Protobuf if needed."
+        fi
+    fi
 fi
 
 if [ ! -f "libsession-util/CMakeLists.txt" ]; then
@@ -57,12 +77,18 @@ $PYTHON -c "import sys; content = open('libsession-util/CMakeLists.txt').read();
 if [ ! -d "$LIBSESSION_BUILD" ] || [ ! -f "$LIBSESSION_BUILD/src/libsession-util.a" ] || [ ! -f "$LIBSESSION_BUILD/src/libsession-crypto.a" ]; then
     echo "   > Configuring libsession-util..."
     mkdir -p "$LIBSESSION_BUILD"
+    
+    EXTRA_FLAGS=""
+    if [[ "$OSTYPE" != "darwin"* ]]; then
+        EXTRA_FLAGS="-Wno-stringop-overflow"
+    fi
+
     cmake -G "${GENERATOR}" -S "$LIBSESSION_DIR" -B "$LIBSESSION_BUILD" \
           -D STATIC_BUNDLE="${STATIC_BUNDLE}" \
           -D BUILD_STATIC_DEPS="${BUILD_STATIC_DEPS}" \
           -D ENABLE_ONIONREQ="${ENABLE_ONIONREQ}" \
           -D WITH_TESTS=OFF \
-          -D CMAKE_CXX_FLAGS="-Wno-stringop-overflow"
+          -D CMAKE_CXX_FLAGS="${EXTRA_FLAGS}"
     
     echo "   > Compiling libsession-util..."
     cmake --build "$LIBSESSION_BUILD" --parallel
