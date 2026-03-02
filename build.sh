@@ -88,25 +88,39 @@ if [ ! -d "$LIBSESSION_BUILD" ] || [ ! -f "$LIBSESSION_BUILD/src/libsession-util
     if [[ "$OSTYPE" == "msys" || "$OSTYPE" == "cygwin" ]]; then
         echo "   > Searching for a valid pkg-config on Windows..."
         GOOD_PKG_CONFIG=""
-        # 1. Try MinGW64 absolute paths (most reliable)
-        if [ -f "/mingw64/bin/pkg-config.exe" ]; then
-            GOOD_PKG_CONFIG="/mingw64/bin/pkg-config.exe"
-        elif [ -f "/mingw64/bin/pkgconf.exe" ]; then
-            GOOD_PKG_CONFIG="/mingw64/bin/pkgconf.exe"
-        # 2. Try pkgconf in PATH (usually better than pkg-config on MSYS2)
-        elif command -v pkgconf >/dev/null 2>&1; then
-            GOOD_PKG_CONFIG=$(command -v pkgconf)
-        # 3. Try pkg-config in PATH but avoid Strawberry Perl
-        elif command -v pkg-config >/dev/null 2>&1; then
-            TEMP_PC=$(command -v pkg-config)
-            if [[ "$TEMP_PC" != *"/Strawberry/"* ]]; then
-                GOOD_PKG_CONFIG="$TEMP_PC"
+        
+        # List of possible paths to check
+        POSSIBLE_PATHS=(
+            "/mingw64/bin/pkgconf.exe"
+            "/mingw64/bin/pkg-config.exe"
+            "C:/msys64/mingw64/bin/pkgconf.exe"
+            "C:/msys64/mingw64/bin/pkg-config.exe"
+            "/usr/bin/pkg-config.exe"
+        )
+
+        for p in "${POSSIBLE_PATHS[@]}"; do
+            if [ -f "$p" ]; then
+                GOOD_PKG_CONFIG="$p"
+                break
             fi
+        done
+
+        # If still not found, try 'which -a' and filter out Strawberry
+        if [ -z "$GOOD_PKG_CONFIG" ]; then
+            ALL_PC=$(which -a pkg-config pkgconf 2>/dev/null || true)
+            for p in $ALL_PC; do
+                if [[ "$p" != *"/Strawberry/"* && "$p" == *".exe" ]]; then
+                    GOOD_PKG_CONFIG="$p"
+                    break
+                fi
+            done
         fi
         
         if [ -n "$GOOD_PKG_CONFIG" ]; then
             echo "   > Using pkg-config at: $GOOD_PKG_CONFIG"
             CMAKE_EXTRA_ARGS="-DPKG_CONFIG_EXECUTABLE=$GOOD_PKG_CONFIG"
+            # Also set PKG_CONFIG_PATH just in case
+            export PKG_CONFIG_PATH="/mingw64/lib/pkgconfig:C:/msys64/mingw64/lib/pkgconfig:/usr/lib/pkgconfig"
         else
             echo "   ⚠️ Warning: No valid pkg-config found (avoiding Strawberry Perl). Build might fail."
         fi
