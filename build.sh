@@ -83,13 +83,32 @@ if [ ! -d "$LIBSESSION_BUILD" ] || [ ! -f "$LIBSESSION_BUILD/src/libsession-util
         EXTRA_FLAGS="-Wno-stringop-overflow"
     fi
 
-    # Explicitly find pkg-config on Windows to avoid CMake errors
+    # Explicitly find pkg-config on Windows to avoid CMake errors (Strawberry Perl conflict)
     CMAKE_EXTRA_ARGS=""
     if [[ "$OSTYPE" == "msys" || "$OSTYPE" == "cygwin" ]]; then
-        if command -v pkg-config >/dev/null 2>&1; then
-            CMAKE_EXTRA_ARGS="-DPKG_CONFIG_EXECUTABLE=$(command -v pkg-config)"
+        echo "   > Searching for a valid pkg-config on Windows..."
+        GOOD_PKG_CONFIG=""
+        # 1. Try MinGW64 absolute paths (most reliable)
+        if [ -f "/mingw64/bin/pkg-config.exe" ]; then
+            GOOD_PKG_CONFIG="/mingw64/bin/pkg-config.exe"
+        elif [ -f "/mingw64/bin/pkgconf.exe" ]; then
+            GOOD_PKG_CONFIG="/mingw64/bin/pkgconf.exe"
+        # 2. Try pkgconf in PATH (usually better than pkg-config on MSYS2)
         elif command -v pkgconf >/dev/null 2>&1; then
-            CMAKE_EXTRA_ARGS="-DPKG_CONFIG_EXECUTABLE=$(command -v pkgconf)"
+            GOOD_PKG_CONFIG=$(command -v pkgconf)
+        # 3. Try pkg-config in PATH but avoid Strawberry Perl
+        elif command -v pkg-config >/dev/null 2>&1; then
+            TEMP_PC=$(command -v pkg-config)
+            if [[ "$TEMP_PC" != *"/Strawberry/"* ]]; then
+                GOOD_PKG_CONFIG="$TEMP_PC"
+            fi
+        fi
+        
+        if [ -n "$GOOD_PKG_CONFIG" ]; then
+            echo "   > Using pkg-config at: $GOOD_PKG_CONFIG"
+            CMAKE_EXTRA_ARGS="-DPKG_CONFIG_EXECUTABLE=$GOOD_PKG_CONFIG"
+        else
+            echo "   ⚠️ Warning: No valid pkg-config found (avoiding Strawberry Perl). Build might fail."
         fi
     fi
 
