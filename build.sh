@@ -17,6 +17,8 @@ LIBSESSION_BUILD="${LIBSESSION_DIR}/Build"
 GENERATOR="Unix Makefiles"
 if command -v ninja >/dev/null 2>&1; then
     GENERATOR="Ninja"
+elif [ -f "/mingw64/bin/ninja.exe" ]; then
+    GENERATOR="Ninja"
 fi
 
 echo ">>> Using generator: ${GENERATOR}"
@@ -72,7 +74,8 @@ if [ ! -f "libsession-util/CMakeLists.txt" ]; then
 fi
 
 # Always try to patch to be safe
-$PYTHON -c "import sys; content = open('libsession-util/CMakeLists.txt').read(); open('libsession-util/CMakeLists.txt', 'w').write(content.replace('target_compile_options(libsession-util_src', '# target_compile_options(libsession-util_src'))"
+echo "   > Patching libsession-util/CMakeLists.txt..."
+sed -i 's/target_compile_options(libsession-util_src/# target_compile_options(libsession-util_src/g' libsession-util/CMakeLists.txt
 
 if [ ! -d "$LIBSESSION_BUILD" ] || [ ! -f "$LIBSESSION_BUILD/src/libsession-util.a" ] || [ ! -f "$LIBSESSION_BUILD/src/libsession-crypto.a" ]; then
     echo "   > Configuring libsession-util..."
