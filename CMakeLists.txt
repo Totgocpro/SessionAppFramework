@@ -39,16 +39,27 @@ endif()
 find_package(OpenSSL REQUIRED)
 
 # libsession-util
+set(LOCAL_LIBSESSION_DIR "${CMAKE_CURRENT_SOURCE_DIR}/libsession-util")
 if(NOT LIBSESSION_FOUND AND NOT LIBSESSION_INCLUDE_DIRS)
-    set(LOCAL_LIBSESSION_DIR "${CMAKE_CURRENT_SOURCE_DIR}/libsession-util")
     if(EXISTS "${LOCAL_LIBSESSION_DIR}/include/session/config/user_profile.hpp")
         set(LIBSESSION_ROOT "${LOCAL_LIBSESSION_DIR}")
         file(TO_CMAKE_PATH "${LOCAL_LIBSESSION_DIR}/Build" LIBSESSION_BUILD_DIR)
+        
         set(OXENC_INC "${LOCAL_LIBSESSION_DIR}/external/oxen-libquic/external/oxen-encoding")
         set(FMT_INC "${LOCAL_LIBSESSION_DIR}/external/oxen-logging/fmt/include")
         set(SPDLOG_INC "${LOCAL_LIBSESSION_DIR}/external/oxen-logging/spdlog/include")
         set(PROTO_INC "${LOCAL_LIBSESSION_DIR}/proto")
-        set(LIBSESSION_INCLUDE_DIRS "${LOCAL_LIBSESSION_DIR}/include" "${OXENC_INC}" "${FMT_INC}" "${SPDLOG_INC}" "${PROTO_INC}")
+        set(PROTOBUF_SUB_INC "${LOCAL_LIBSESSION_DIR}/external/protobuf/src")
+        
+        set(LIBSESSION_INCLUDE_DIRS 
+            "${LOCAL_LIBSESSION_DIR}/include" 
+            "${OXENC_INC}" 
+            "${FMT_INC}" 
+            "${SPDLOG_INC}" 
+            "${PROTO_INC}"
+            "${PROTOBUF_SUB_INC}"
+        )
+        
         file(GLOB_RECURSE FOUND_LIBS "${LIBSESSION_BUILD_DIR}/*.a" "${LIBSESSION_BUILD_DIR}/*.lib")
         set(LIBSESSION_LIBRARIES "")
         foreach(LIB_PATH ${FOUND_LIBS})
@@ -57,7 +68,9 @@ if(NOT LIBSESSION_FOUND AND NOT LIBSESSION_INCLUDE_DIRS)
                 list(APPEND LIBSESSION_LIBRARIES "${CLEAN_LIB_PATH}")
             endif()
         endforeach()
-        set(LIBSESSION_FOUND TRUE)
+        if(LIBSESSION_LIBRARIES)
+            set(LIBSESSION_FOUND TRUE)
+        endif()
     endif()
 endif()
 
@@ -117,12 +130,10 @@ else()
 endif()
 add_library(SAF::SessionAppFramework ALIAS SessionAppFramework)
 
-# Standard Includes
+# Inclusions
 target_include_directories(SessionAppFramework PUBLIC "$<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>" "$<INSTALL_INTERFACE:include>")
-
-# System Includes (libsession-util and curl)
-target_include_directories(SessionAppFramework SYSTEM PRIVATE ${LIBSESSION_INCLUDE_DIRS})
-target_include_directories(SessionAppFramework SYSTEM PRIVATE ${CURL_INCLUDE_DIRS})
+target_include_directories(SessionAppFramework PRIVATE ${LIBSESSION_INCLUDE_DIRS})
+target_include_directories(SessionAppFramework PRIVATE ${CURL_INCLUDE_DIRS})
 
 target_link_libraries(SessionAppFramework
     PUBLIC
@@ -139,41 +150,49 @@ target_link_libraries(SessionAppFramework
 # ─────────────────────────────────────────────────────────
 # System Dependencies (Protobuf, Sodium, etc.)
 # ─────────────────────────────────────────────────────────
-
-# Protobuf: Try multiple ways to find the headers
-pkg_check_modules(PROTOBUF QUIET protobuf IMPORTED_TARGET)
-if(PROTOBUF_FOUND)
-    target_include_directories(SessionAppFramework SYSTEM PRIVATE ${PROTOBUF_INCLUDE_DIRS})
-    target_link_libraries(SessionAppFramework PRIVATE PkgConfig::PROTOBUF)
-endif()
-
-pkg_check_modules(PROTOBUF_LITE QUIET protobuf-lite IMPORTED_TARGET)
+# We REQUIRE protobuf-lite >= 3.21.0 because of the generated code
+pkg_check_modules(PROTOBUF_LITE QUIET protobuf-lite>=3.21.0 IMPORTED_TARGET)
 if(PROTOBUF_LITE_FOUND)
-    target_include_directories(SessionAppFramework SYSTEM PRIVATE ${PROTOBUF_LITE_INCLUDE_DIRS})
+    target_include_directories(SessionAppFramework PRIVATE ${PROTOBUF_LITE_INCLUDE_DIRS})
     target_link_libraries(SessionAppFramework PRIVATE PkgConfig::PROTOBUF_LITE)
-endif()
-
-# Fallback for Protobuf headers (essential for manylinux)
-find_path(PROTOBUF_SYS_INC NAMES google/protobuf/port_def.inc)
-if(PROTOBUF_SYS_INC)
-    target_include_directories(SessionAppFramework SYSTEM PRIVATE ${PROTOBUF_SYS_INC})
-endif()
-
-# Sodium: try PkgConfig
-if(PKG_CONFIG_FOUND)
-    pkg_check_modules(SODIUM QUIET libsodium IMPORTED_TARGET)
-    if(SODIUM_FOUND)
-        target_include_directories(SessionAppFramework SYSTEM PRIVATE ${SODIUM_INCLUDE_DIRS})
-        target_link_libraries(SessionAppFramework PRIVATE PkgConfig::SODIUM)
+else()
+    pkg_check_modules(PROTOBUF QUIET protobuf>=3.21.0 IMPORTED_TARGET)
+    if(PROTOBUF_FOUND)
+        target_include_directories(SessionAppFramework PRIVATE ${PROTOBUF_INCLUDE_DIRS})
+        target_link_libraries(SessionAppFramework PRIVATE PkgConfig::PROTOBUF)
+    else()
+        # Fallback to submodule if found
+        if(EXISTS "${LOCAL_LIBSESSION_DIR}/external/protobuf/src")
+            message(STATUS "Using fallback Protobuf include path from submodule")
+            target_include_directories(SessionAppFramework PRIVATE "${LOCAL_LIBSESSION_DIR}/external/protobuf/src")
+        endif()
     endif()
 endif()
 
-# Nettle: try PkgConfig
-if(SAF_ENABLE_ONION AND PKG_CONFIG_FOUND)
-    pkg_check_modules(NETTLE QUIET nettle IMPORTED_TARGET)
-    if(NETTLE_FOUND)
-        target_include_directories(SessionAppFramework SYSTEM PRIVATE ${NETTLE_INCLUDE_DIRS})
-        target_link_libraries(SessionAppFramework PRIVATE PkgConfig::NETTLE)
+find_package(Protobuf 3.21.0 QUIET)
+if(Protobuf_FOUND)
+    target_include_directories(SessionAppFramework PRIVATE ${Protobuf_INCLUDE_DIRS})
+    if(TARGET Protobuf::libprotobuf-lite)
+        target_link_libraries(SessionAppFramework PRIVATE Protobuf::libprotobuf-lite)
+    elseif(TARGET Protobuf::libprotobuf)
+        target_link_libraries(SessionAppFramework PRIVATE Protobuf::libprotobuf)
+    endif()
+endif()
+
+
+if(PKG_CONFIG_FOUND)
+    pkg_check_modules(SODIUM QUIET libsodium IMPORTED_TARGET)
+    if(SODIUM_FOUND)
+        target_include_directories(SessionAppFramework PRIVATE ${SODIUM_INCLUDE_DIRS})
+        target_link_libraries(SessionAppFramework PRIVATE PkgConfig::SODIUM)
+    endif()
+    
+    if(SAF_ENABLE_ONION)
+        pkg_check_modules(NETTLE QUIET nettle IMPORTED_TARGET)
+        if(NETTLE_FOUND)
+            target_include_directories(SessionAppFramework PRIVATE ${NETTLE_INCLUDE_DIRS})
+            target_link_libraries(SessionAppFramework PRIVATE PkgConfig::NETTLE)
+        endif()
     endif()
 endif()
 
@@ -182,7 +201,7 @@ if(SAF_ENABLE_ONION)
 endif()
 
 # ─────────────────────────────────────────────────────────
-# Examples / Tests / Install / Python
+# Install & Python
 # ─────────────────────────────────────────────────────────
 if(SAF_BUILD_EXAMPLES)
     add_subdirectory(examples)

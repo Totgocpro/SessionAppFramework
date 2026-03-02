@@ -32,6 +32,7 @@ OXENC_INC="${LIBSESSION_DIR}/external/oxen-libquic/external/oxen-encoding"
 FMT_INC="${LIBSESSION_DIR}/external/oxen-logging/fmt/include"
 SPDLOG_INC="${LIBSESSION_DIR}/external/oxen-logging/spdlog/include"
 PROTO_INC="${LIBSESSION_DIR}/proto"
+PROTOBUF_SUB_INC="${LIBSESSION_DIR}/external/protobuf/src"
 
 # Find pybind11 CMake directory
 PYBIND11_CMAKE_DIR=$(python3 -c "import pybind11; print(pybind11.get_cmake_dir())")
@@ -43,7 +44,7 @@ LIBSESSION_LIBS_STR=$(IFS=';'; echo "${LIBSESSION_LIBS[*]}")
 cmake -G Ninja -S . -B "$BUILD_DIR" \
       -D SAF_BUILD_PYTHON=ON \
       -D pybind11_DIR="$PYBIND11_CMAKE_DIR" \
-      -D LIBSESSION_INCLUDE_DIRS="${LIBSESSION_DIR}/include;${OXENC_INC};${FMT_INC};${SPDLOG_INC};${PROTO_INC}" \
+      -D LIBSESSION_INCLUDE_DIRS="${LIBSESSION_DIR}/include;${OXENC_INC};${FMT_INC};${SPDLOG_INC};${PROTO_INC};${PROTOBUF_SUB_INC}" \
       -D LIBSESSION_LIBRARIES="${LIBSESSION_LIBS_STR}"
 
 cmake --build "$BUILD_DIR" --parallel

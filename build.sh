@@ -85,6 +85,7 @@ OXENC_INC="${LIBSESSION_DIR}/external/oxen-libquic/external/oxen-encoding"
 FMT_INC="${LIBSESSION_DIR}/external/oxen-logging/fmt/include"
 SPDLOG_INC="${LIBSESSION_DIR}/external/oxen-logging/spdlog/include"
 PROTO_INC="${LIBSESSION_DIR}/proto"
+PROTOBUF_SUB_INC="${LIBSESSION_DIR}/external/protobuf/src"
 
 # Collect ALL static libraries from the build folder
 if [[ "$OSTYPE" == "msys" || "$OSTYPE" == "cygwin" ]]; then
@@ -104,7 +105,7 @@ cmake -G "${GENERATOR}" \
     -D SAF_BUILD_EXAMPLES=ON \
     -D SAF_ENABLE_ONION="${ENABLE_ONIONREQ}" \
     -D LIBSESSION_ROOT="${LIBSESSION_DIR}" \
-    -D LIBSESSION_INCLUDE_DIRS="${LIBSESSION_DIR}/include;${OXENC_INC};${FMT_INC};${SPDLOG_INC};${PROTO_INC}" \
+    -D LIBSESSION_INCLUDE_DIRS="${LIBSESSION_DIR}/include;${OXENC_INC};${FMT_INC};${SPDLOG_INC};${PROTO_INC};${PROTOBUF_SUB_INC}" \
     -D LIBSESSION_LIBRARIES="${LIBSESSION_LIBS_STR}"
 
 echo ">>> 3. Compiling SessionAppFramework..."
