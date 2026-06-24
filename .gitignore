@@ -1,6 +1,7 @@
 # Build directories
 build/
 Build/
+build*/
 bin/
 lib/
 *.so
@@ -32,3 +33,4 @@ examples/03_group_bot
 examples/04_file_transfer
 examples/05_echo_bot
 examples/06_group_management_bot
+SessionSource/

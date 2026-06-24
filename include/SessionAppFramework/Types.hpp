@@ -32,6 +32,11 @@ enum class MessageType {
     Control,   // internal: read receipts, typing indicators, etc.
     Reaction,
     Reply,
+    Unsend,
+    DataExtraction,
+    Call,
+    ExpirationUpdate,
+    OpenGroup,
 };
 
 struct Message {
@@ -59,6 +64,39 @@ struct Message {
     std::string     GroupName;
     Bytes           MemberAuthData;
     Bytes           AdminSignature;
+
+    // Read receipts
+    bool            IsReadReceipt     = false;
+    std::vector<int64_t> ReceiptTimestamps;
+
+    // Typing indicators
+    bool            IsTypingStarted   = false;
+    bool            IsTypingStopped   = false;
+
+    // Unsend / delete messages
+    std::string     UnsendAuthor;
+    bool            IsUnsend          = false;
+
+    // Data extraction notifications
+    bool            IsDataExtraction  = false;
+    int             ExtractionType    = 0; // 1=SCREENSHOT, 2=MEDIA_SAVED
+
+    // Call messages
+    bool            IsCallMessage     = false;
+    int             CallType          = 0; // PRE_OFFER=6, OFFER=1, ANSWER=2, etc.
+    std::string     CallUuid;
+
+    // Disappearing messages
+    int             ExpirationTimer   = 0; // seconds, 0 = none
+    int             ExpirationType    = 0; // 0=unknown, 1=delete_after_read, 2=delete_after_send
+    bool            IsExpirationUpdate = false;
+
+    // Sync target (multi-device)
+    std::string     SyncTarget;
+
+    // Open group (community)
+    std::string     OpenGroupUrl;
+    bool            IsOpenGroupMessage = false;
 };
 
 // ─────────────────────────────────────────────────────────
@@ -139,6 +177,41 @@ using ErrorCallback      = std::function<void(const std::string& error)>;
 using ProgressCallback   = std::function<void(uint64_t sent, uint64_t total)>;
 
 // ─────────────────────────────────────────────────────────
+// Community / Open Group
+// ─────────────────────────────────────────────────────────
+struct CommunityRoom {
+    std::string     BaseUrl;
+    std::string     Room;
+    Bytes           PubKey;         // 32-byte server Ed25519 pubkey
+    std::string     FullUrl;
+    std::string     Name;           // Human-readable room name
+    std::string     Description;
+    std::vector<std::string> Mods;  // Moderator session IDs
+    std::vector<std::string> Admins;
+    bool            DefaultInbox   = false;
+    bool            DefaultOutbox  = false;
+    bool            InfoUpdates    = false;
+};
+
+struct CommunityMessage {
+    std::string     Id;
+    std::string     Sender;
+    std::string     Body;
+    int64_t         Timestamp   = 0;
+    std::string     Room;
+    std::string     BaseUrl;
+};
+
+// ─────────────────────────────────────────────────────────
+// ONS Resolution result
+// ─────────────────────────────────────────────────────────
+struct OnsResult {
+    std::string     SessionId;    // 66-char hex
+    bool            Found        = false;
+    int64_t         Expiration   = 0;
+};
+
+// ─────────────────────────────────────────────────────────
 // Poll configuration
 // ─────────────────────────────────────────────────────────
 struct PollConfig {
@@ -146,6 +219,7 @@ struct PollConfig {
     int                       Namespace     = 0;    // default DM namespace
     bool                      PollGroups    = true;
     bool                      PollConfig    = true;
+    bool                      PollCommunities = true;
     std::string               MessageDbPath = "";   // Binary file for processed message IDs
 };
 

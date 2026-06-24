@@ -9,6 +9,7 @@
 #include <functional>
 #include <memory>
 #include <thread>
+#include <set>
 
 namespace Saf {
 
@@ -99,6 +100,84 @@ public:
      * @brief Kicks members and deletes their content (Admin only).
      */
     std::string SendDeleteMember(const std::string& groupId, const std::vector<AccountId>& memberIds);
+
+    // ─────────────────────────────────────────────────────────
+    // Typing Indicators
+    // ─────────────────────────────────────────────────────────
+
+    /**
+     * @brief Sends a typing started indicator.
+     */
+    std::string SendTypingStarted(const AccountId& conversationId);
+
+    /**
+     * @brief Sends a typing stopped indicator.
+     */
+    std::string SendTypingStopped(const AccountId& conversationId);
+
+    // ─────────────────────────────────────────────────────────
+    // Read Receipts
+    // ─────────────────────────────────────────────────────────
+
+    /**
+     * @brief Sends read receipts for given message timestamps.
+     */
+    std::string SendReadReceipt(const AccountId& conversationId, const std::vector<int64_t>& timestamps);
+
+    // ─────────────────────────────────────────────────────────
+    // Unsend / Delete Messages
+    // ─────────────────────────────────────────────────────────
+
+    /**
+     * @brief Sends an unsend request to delete a message for everyone.
+     */
+    std::string SendUnsend(const AccountId& conversationId, int64_t messageTimestamp, const AccountId& authorId);
+
+    // ─────────────────────────────────────────────────────────
+    // Data Extraction Notification
+    // ─────────────────────────────────────────────────────────
+
+    /**
+     * @brief Sends a data extraction notification (screenshot or media saved).
+     */
+    std::string SendDataExtractionNotification(const AccountId& conversationId, int type, int64_t timestamp = 0);
+
+    // ─────────────────────────────────────────────────────────
+    // Disappearing Messages
+    // ─────────────────────────────────────────────────────────
+
+    /**
+     * @brief Sends an expiration timer update for a conversation.
+     */
+    std::string SendExpirationTimerUpdate(const AccountId& conversationId, uint32_t expiresInSeconds, int expirationType);
+
+    // ─────────────────────────────────────────────────────────
+    // Call Messages
+    // ─────────────────────────────────────────────────────────
+
+    /**
+     * @brief Sends a call signaling message.
+     */
+    std::string SendCallMessage(const AccountId& conversationId, int callType, const std::string& uuid, const std::vector<std::string>& sdps = {});
+
+    // ─────────────────────────────────────────────────────────
+    // Group Update Messages (Full V2)
+    // ─────────────────────────────────────────────────────────
+
+    /**
+     * @brief Sends a group info change (name/avatar/disappearing messages).
+     */
+    std::string SendGroupInfoChange(const std::string& groupId, int type, const std::string& updatedValue);
+
+    /**
+     * @brief Notifies that a member has left a group.
+     */
+    std::string SendMemberLeft(const std::string& groupId);
+
+    /**
+     * @brief Sends a member left notification message.
+     */
+    std::string SendMemberLeftNotification(const std::string& groupId);
 
     /**
      * @brief Sends a reaction to a message.

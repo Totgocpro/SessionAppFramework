@@ -7,6 +7,9 @@
 #include <string>
 #include <memory>
 
+#include <nlohmann/json.hpp>
+using json = nlohmann::json;
+
 namespace Saf {
 
 /**
@@ -144,6 +147,56 @@ public:
      * @param hashes  List of message hashes to delete.
      */
     void Delete(const std::vector<std::string>& hashes, int ns = 0);
+
+    // ─────────────────────────────────────────────────────────
+    // Expire RPC
+    // ─────────────────────────────────────────────────────────
+
+    /**
+     * @brief Updates the expiry timestamps (TTLs) of messages on the swarm.
+     * Used for disappearing messages (deleteAfterRead).
+     * @param hashes    List of message hashes to update expiry for.
+     * @param expiryMs  New expiry timestamp in milliseconds.
+     * @param ns        Namespace.
+     */
+    void Expire(const std::vector<std::string>& hashes, int64_t expiryMs, int ns = 0);
+
+    // ─────────────────────────────────────────────────────────
+    // Batch Requests
+    // ─────────────────────────────────────────────────────────
+
+    struct BatchSubRequest {
+        std::string Method;     // "store", "retrieve", "delete"
+        json        Params;
+    };
+
+    struct BatchSubResponse {
+        int         StatusCode  = 0;
+        json        Body;
+    };
+
+    /**
+     * @brief Sends a batch of sub-requests to a single snode.
+     * @param requests  List of sub-requests to send.
+     * @param targetNode The snode to send the batch to.
+     * @param method   "batch" or "sequence".
+     * @return List of sub-responses.
+     */
+    std::vector<BatchSubResponse> Batch(
+        const std::vector<BatchSubRequest>& requests,
+        const SessionNode& targetNode,
+        const std::string& batchMethod = "batch");
+
+    // ─────────────────────────────────────────────────────────
+    // ONS Resolution
+    // ─────────────────────────────────────────────────────────
+
+    /**
+     * @brief Resolves an ONS name to a Session ID.
+     * @param onsName  Human-readable ONS name (e.g., "mybot").
+     * @return OnsResult with the resolved Session ID.
+     */
+    OnsResult ResolveOns(const std::string& onsName);
 
 private:
     struct Impl;

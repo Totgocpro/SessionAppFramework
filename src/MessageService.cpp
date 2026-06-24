@@ -201,6 +201,22 @@ struct MessageService::Impl {
                     msg.ReplyToId = std::to_string(dm.quote().id());
                 }
 
+                // Expiration timer
+                if (content.has_expirationtype() && content.has_expirationtimer()) {
+                    msg.ExpirationType = static_cast<int>(content.expirationtype());
+                    msg.ExpirationTimer = content.expirationtimer();
+                    if (dm.flags() & SessionProtos::DataMessage_Flags_EXPIRATION_TIMER_UPDATE) {
+                        msg.Type = MessageType::ExpirationUpdate;
+                        msg.IsExpirationUpdate = true;
+                        msg.Body = "[Expiration Update]";
+                    }
+                }
+
+                // Sync target (multi-device)
+                if (!dm.synctarget().empty()) {
+                    msg.SyncTarget = dm.synctarget();
+                }
+
                 if (dm.has_groupupdatemessage()) {
                     const auto& gum = dm.groupupdatemessage();
                     if (gum.has_invitemessage()) {
@@ -211,14 +227,66 @@ struct MessageService::Impl {
                         msg.MemberAuthData = Bytes(invite.memberauthdata().begin(), invite.memberauthdata().end());
                         msg.AdminSignature = Bytes(invite.adminsignature().begin(), invite.adminsignature().end());
                         msg.Body = "Invited to group: " + msg.GroupName;
+                    } else if (gum.has_infochangemessage()) {
+                        const auto& ic = gum.infochangemessage();
+                        msg.Type = MessageType::Control;
+                        msg.GroupId = conversationId;
+                        if (ic.type() == SessionProtos::GroupUpdateInfoChangeMessage_Type_NAME) {
+                            msg.Body = "[Group Name Changed to: " + ic.updatedname() + "]";
+                        } else if (ic.type() == SessionProtos::GroupUpdateInfoChangeMessage_Type_AVATAR) {
+                            msg.Body = "[Group Avatar Changed]";
+                        } else if (ic.type() == SessionProtos::GroupUpdateInfoChangeMessage_Type_DISAPPEARING_MESSAGES) {
+                            msg.ExpirationTimer = ic.updatedexpiration();
+                            msg.Body = "[Disappearing Messages Changed]";
+                        }
+                    } else if (gum.has_promotemessage()) {
+                        msg.Type = MessageType::Control;
+                        msg.Body = "[Promoted to Admin]";
+                    } else if (gum.has_memberleftmessage()) {
+                        msg.Type = MessageType::Control;
+                        msg.Body = "[Member Left]";
+                    } else if (gum.has_memberleftnotificationmessage()) {
+                        msg.Type = MessageType::Control;
+                        msg.Body = "[Member Left Notification]";
                     }
                 }
-            } else {
-                if (content.has_messagerequestresponse()) {
-                    msg.Body = "[Message Request Response]";
-                } else {
-                    return true; 
+            } else if (content.has_typingmessage()) {
+                const auto& tm = content.typingmessage();
+                msg.Type = MessageType::Control;
+                msg.IsTypingStarted = (tm.action() == SessionProtos::TypingMessage_Action_STARTED);
+                msg.IsTypingStopped = (tm.action() == SessionProtos::TypingMessage_Action_STOPPED);
+                msg.Body = msg.IsTypingStarted ? "[Typing Started]" : "[Typing Stopped]";
+            } else if (content.has_unsendrequest()) {
+                const auto& ur = content.unsendrequest();
+                msg.Type = MessageType::Unsend;
+                msg.IsUnsend = true;
+                msg.UnsendAuthor = ur.author();
+                msg.Id = std::to_string(ur.timestamp());
+            } else if (content.has_receiptmessage()) {
+                const auto& rm = content.receiptmessage();
+                msg.Type = MessageType::Control;
+                msg.IsReadReceipt = true;
+                for (int i = 0; i < rm.timestamp_size(); ++i) {
+                    msg.ReceiptTimestamps.push_back(rm.timestamp(i));
                 }
+                msg.Body = "[Read Receipt]";
+            } else if (content.has_dataextractionnotification()) {
+                const auto& den = content.dataextractionnotification();
+                msg.Type = MessageType::DataExtraction;
+                msg.IsDataExtraction = true;
+                msg.ExtractionType = den.type();
+                msg.Body = "[Data Extraction]";
+            } else if (content.has_callmessage()) {
+                const auto& cm = content.callmessage();
+                msg.Type = MessageType::Call;
+                msg.IsCallMessage = true;
+                msg.CallType = cm.type();
+                msg.CallUuid = cm.uuid();
+                msg.Body = "[Call Message]";
+            } else if (content.has_messagerequestresponse()) {
+                msg.Body = "[Message Request Response]";
+            } else {
+                return true; 
             }
 
             FireMessage(msg);
@@ -380,7 +448,7 @@ struct MessageService::Impl {
                      }
                      
                      Bytes authData;
-                     if (gid.Id.substr(0, 2) == "03" && !gid.IsAdmin) {
+                     if (gid.Id.substr(0, 2) == "03") {
                          authData = GroupMgr.GetAuthData(gid.Id);
                      }
 
@@ -457,13 +525,7 @@ struct MessageService::Impl {
                 std::nullopt
             );
 
-            Bytes authData;
-            // Get auth data if we are not admin
-            auto g = GroupMgr.Get(destinationId);
-            if (!g.IsAdmin) {
-                authData = GroupMgr.GetAuthData(destinationId);
-            }
-            // If the group has no members yet, it might not be a valid group entry
+            Bytes authData = GroupMgr.GetAuthData(destinationId);
             return Swarm.StoreWithAuth(destinationId, encoded, 11, 14LL * 24 * 3600 * 1000, authData);
         } else if (destinationId.size() == 66 && destinationId.substr(0, 2) == "05") {
              // Distinguish between MP and Legacy Group
@@ -613,6 +675,128 @@ std::string MessageService::SendDeleteMember(const std::string& groupId, const s
     for (const auto& mid : memberIds) {
         dm->add_membersessionids(mid);
     }
+    return m_Impl->EncodeAndSend(groupId, content);
+}
+
+// ─────────────────────────────────────────────────────────
+// Typing Indicators
+// ─────────────────────────────────────────────────────────
+
+std::string MessageService::SendTypingStarted(const AccountId& conversationId) {
+    SessionProtos::Content content;
+    auto* tm = content.mutable_typingmessage();
+    tm->set_timestamp(Utils::NowMs());
+    tm->set_action(SessionProtos::TypingMessage_Action_STARTED);
+    // Typing messages are sent with a short TTL (typically 30s)
+    return m_Impl->EncodeAndSend(conversationId, content);
+}
+
+std::string MessageService::SendTypingStopped(const AccountId& conversationId) {
+    SessionProtos::Content content;
+    auto* tm = content.mutable_typingmessage();
+    tm->set_timestamp(Utils::NowMs());
+    tm->set_action(SessionProtos::TypingMessage_Action_STOPPED);
+    return m_Impl->EncodeAndSend(conversationId, content);
+}
+
+// ─────────────────────────────────────────────────────────
+// Read Receipts
+// ─────────────────────────────────────────────────────────
+
+std::string MessageService::SendReadReceipt(const AccountId& conversationId, const std::vector<int64_t>& timestamps) {
+    SessionProtos::Content content;
+    auto* rm = content.mutable_receiptmessage();
+    rm->set_type(SessionProtos::ReceiptMessage_Type_READ);
+    for (auto ts : timestamps) {
+        rm->add_timestamp(ts);
+    }
+    return m_Impl->EncodeAndSend(conversationId, content);
+}
+
+// ─────────────────────────────────────────────────────────
+// Unsend / Delete Messages
+// ─────────────────────────────────────────────────────────
+
+std::string MessageService::SendUnsend(const AccountId& conversationId, int64_t messageTimestamp, const AccountId& authorId) {
+    SessionProtos::Content content;
+    auto* ur = content.mutable_unsendrequest();
+    ur->set_timestamp(static_cast<uint64_t>(messageTimestamp));
+    ur->set_author(Utils::ToLower(authorId));
+    return m_Impl->EncodeAndSend(conversationId, content);
+}
+
+// ─────────────────────────────────────────────────────────
+// Data Extraction Notifications
+// ─────────────────────────────────────────────────────────
+
+std::string MessageService::SendDataExtractionNotification(const AccountId& conversationId, int type, int64_t timestamp) {
+    SessionProtos::Content content;
+    auto* den = content.mutable_dataextractionnotification();
+    den->set_type(static_cast<SessionProtos::DataExtractionNotification_Type>(type));
+    if (timestamp > 0) den->set_timestamp(static_cast<uint64_t>(timestamp));
+    return m_Impl->EncodeAndSend(conversationId, content);
+}
+
+// ─────────────────────────────────────────────────────────
+// Disappearing Messages
+// ─────────────────────────────────────────────────────────
+
+std::string MessageService::SendExpirationTimerUpdate(const AccountId& conversationId, uint32_t expiresInSeconds, int expirationType) {
+    SessionProtos::Content content;
+    content.set_expirationtype(static_cast<SessionProtos::Content_ExpirationType>(expirationType));
+    content.set_expirationtimer(expiresInSeconds);
+    auto* dm = content.mutable_datamessage();
+    dm->set_flags(SessionProtos::DataMessage_Flags_EXPIRATION_TIMER_UPDATE);
+    dm->set_body("[Disappearing Messages]");
+    return m_Impl->EncodeAndSend(conversationId, content);
+}
+
+// ─────────────────────────────────────────────────────────
+// Call Messages
+// ─────────────────────────────────────────────────────────
+
+std::string MessageService::SendCallMessage(const AccountId& conversationId, int callType, const std::string& uuid, const std::vector<std::string>& sdps) {
+    SessionProtos::Content content;
+    auto* cm = content.mutable_callmessage();
+    cm->set_type(static_cast<SessionProtos::CallMessage_Type>(callType));
+    cm->set_uuid(uuid);
+    for (const auto& sdp : sdps) {
+        cm->add_sdps(sdp);
+    }
+    return m_Impl->EncodeAndSend(conversationId, content);
+}
+
+// ─────────────────────────────────────────────────────────
+// Group Update Messages (Full V2)
+// ─────────────────────────────────────────────────────────
+
+std::string MessageService::SendGroupInfoChange(const std::string& groupId, int type, const std::string& updatedValue) {
+    SessionProtos::Content content;
+    auto* gum = content.mutable_datamessage()->mutable_groupupdatemessage();
+    auto* ic = gum->mutable_infochangemessage();
+    ic->set_type(static_cast<SessionProtos::GroupUpdateInfoChangeMessage_Type>(type));
+    if (type == SessionProtos::GroupUpdateInfoChangeMessage_Type_NAME) {
+        ic->set_updatedname(updatedValue);
+    } else if (type == SessionProtos::GroupUpdateInfoChangeMessage_Type_DISAPPEARING_MESSAGES) {
+        ic->set_updatedexpiration(static_cast<uint32_t>(std::stoul(updatedValue)));
+    }
+    // Admin signature would need to be computed from group admin key
+    // For now, set empty bytes as placeholder
+    ic->set_adminsignature("");
+    return m_Impl->EncodeAndSend(groupId, content);
+}
+
+std::string MessageService::SendMemberLeft(const std::string& groupId) {
+    SessionProtos::Content content;
+    auto* gum = content.mutable_datamessage()->mutable_groupupdatemessage();
+    gum->mutable_memberleftmessage(); // Empty message, sender identity is the member who left
+    return m_Impl->EncodeAndSend(groupId, content);
+}
+
+std::string MessageService::SendMemberLeftNotification(const std::string& groupId) {
+    SessionProtos::Content content;
+    auto* gum = content.mutable_datamessage()->mutable_groupupdatemessage();
+    gum->mutable_memberleftnotificationmessage(); // Empty message
     return m_Impl->EncodeAndSend(groupId, content);
 }
 

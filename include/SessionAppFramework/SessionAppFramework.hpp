@@ -45,3 +45,4 @@
 #include "GroupManager.hpp"
 #include "FileTransfer.hpp"
 #include "OnionRouter.hpp"
+#include "CommunityManager.hpp"

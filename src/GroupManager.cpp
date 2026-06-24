@@ -127,6 +127,15 @@ struct GroupManager::Impl {
         return g;
     }
 
+    // Get the group admin key for subaccount auth
+    Bytes GetGroupAuthData(const std::string& groupId) {
+        auto it = Groups.find(groupId);
+        if (it != Groups.end() && !it->second.AdminKey.empty()) {
+            return it->second.AdminKey;
+        }
+        return {};
+    }
+
     // Store a config blob for a group
     void PushGroupNs(const std::string& groupId,
                      session::config::ConfigBase& cfg,
@@ -134,8 +143,11 @@ struct GroupManager::Impl {
         if (!cfg.needs_push()) return;
         auto [seqno, payloads, obs] = cfg.push();
         std::unordered_set<std::string> hashes;
+        Bytes authData;
+        if (groupId.substr(0, 2) == "03")
+            authData = GetGroupAuthData(groupId);
         for (const auto& payload : payloads) {
-            auto h = Swarm.Store(groupId, payload, ns, 30LL * 24 * 3600 * 1000);
+            auto h = Swarm.StoreWithAuth(groupId, payload, ns, 30LL * 24 * 3600 * 1000, authData);
             if (!h.empty()) hashes.insert(h);
         }
         cfg.confirm_pushed(seqno, hashes);
@@ -461,7 +473,8 @@ void GroupManager::PushConfig(const std::string& groupId) {
     
     if (b.Keys) {
         if (auto pending = b.Keys->pending_config()) {
-            m_Impl->Swarm.Store(groupId, Bytes(pending->begin(), pending->end()), Impl::NS_GROUP_KEYS, 30LL * 24 * 3600 * 1000);
+            Bytes authData = m_Impl->GetGroupAuthData(groupId);
+            m_Impl->Swarm.StoreWithAuth(groupId, Bytes(pending->begin(), pending->end()), Impl::NS_GROUP_KEYS, 30LL * 24 * 3600 * 1000, authData);
         }
     }
 }
@@ -541,6 +554,10 @@ Bytes GroupManager::GetEncryptionKey(const std::string& groupId) {
 
 Bytes GroupManager::GetAuthData(const std::string& groupId) {
     if (groupId.substr(0, 2) == "03") {
+        // First check for admin key in the live bundle
+        auto auth = m_Impl->GetGroupAuthData(groupId);
+        if (!auth.empty()) return auth;
+        // Fall back to stored auth_data from UserGroups (non-admin subaccount signing value)
         return m_Impl->Config.GetGroupAuthData(groupId);
     }
     return {};

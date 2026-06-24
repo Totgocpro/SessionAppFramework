@@ -31,6 +31,23 @@ void User::SendFile(const std::string& filePath) {
     m_Client->GetMessageService().SendFile(m_Id, info);
 }
 
+void User::SendVoice(const std::string& filePath) {
+    auto info = m_Client->GetFileTransfer().UploadFile(filePath, "audio/ogg");
+    m_Client->GetMessageService().SendFile(m_Id, info);
+}
+
+void User::SendTypingStarted() {
+    m_Client->GetMessageService().SendTypingStarted(m_Id);
+}
+
+void User::SendTypingStopped() {
+    m_Client->GetMessageService().SendTypingStopped(m_Id);
+}
+
+void User::SendReadReceipt(const std::vector<int64_t>& timestamps) {
+    m_Client->GetMessageService().SendReadReceipt(m_Id, timestamps);
+}
+
 // ─────────────────────────────────────────────────────────
 // Group Implementation
 // ─────────────────────────────────────────────────────────
@@ -70,12 +87,33 @@ void Group::SendFile(const std::string& filePath) {
     m_Client->GetMessageService().SendGroupFile(m_Id, info);
 }
 
+void Group::SendVoice(const std::string& filePath) {
+    auto info = m_Client->GetFileTransfer().UploadFile(filePath, "audio/ogg");
+    m_Client->GetMessageService().SendGroupFile(m_Id, info);
+}
+
+void Group::SendTypingStarted() {
+    m_Client->GetMessageService().SendTypingStarted(m_Id);
+}
+
+void Group::SendTypingStopped() {
+    m_Client->GetMessageService().SendTypingStopped(m_Id);
+}
+
+void Group::SendReadReceipt(const std::vector<int64_t>& timestamps) {
+    m_Client->GetMessageService().SendReadReceipt(m_Id, timestamps);
+}
+
 void Group::Leave() {
     m_Client->GetGroupManager().Leave(m_Id);
 }
 
 void Group::SetName(const std::string& name) {
     m_Client->GetGroupManager().SetName(m_Id, name);
+}
+
+void Group::SetDescription(const std::string& description) {
+    m_Client->GetGroupManager().SetDescription(m_Id, description);
 }
 
 void Group::AddMember(const std::string& userId) {
@@ -92,6 +130,10 @@ void Group::PromoteMember(const std::string& userId) {
 
 void Group::DemoteMember(const std::string& userId) {
     m_Client->GetGroupManager().DemoteAdmin(m_Id, userId);
+}
+
+void Group::Delete() {
+    m_Client->GetGroupManager().Destroy(m_Id);
 }
 
 // ─────────────────────────────────────────────────────────
@@ -140,8 +182,6 @@ void Message::Reply(const std::string& text) {
 
 void Message::React(const std::string& emoji) {
     if (IsGroup()) {
-        // For groups, we must pass the ORIGINAL sender ID as the 'author' of the reaction target
-        // This was the fix found earlier.
         m_Client->GetMessageService().SendGroupReaction(m_Raw.GroupId, m_Raw.Id, m_Raw.Sender, emoji);
     } else {
         m_Client->GetMessageService().SendReaction(m_Raw.Sender, m_Raw.Id, m_Raw.Sender, emoji);
@@ -149,7 +189,42 @@ void Message::React(const std::string& emoji) {
 }
 
 void Message::MarkAsRead() {
-    // TODO: Implement Read Receipts in MessageService first
+    std::vector<int64_t> timestamps;
+    try { timestamps.push_back(std::stoll(m_Raw.Id)); } catch (...) {}
+    if (timestamps.empty()) timestamps.push_back(m_Raw.Timestamp);
+
+    if (IsGroup()) {
+        m_Client->GetMessageService().SendReadReceipt(m_Raw.GroupId, timestamps);
+    } else {
+        m_Client->GetMessageService().SendReadReceipt(m_Raw.Sender, timestamps);
+    }
+}
+
+void Message::Delete() {
+    int64_t ts = m_Raw.Timestamp;
+    try { ts = std::stoll(m_Raw.Id); } catch (...) {}
+
+    if (IsGroup()) {
+        m_Client->GetMessageService().SendUnsend(m_Raw.GroupId, ts, m_Raw.Sender);
+    } else {
+        m_Client->GetMessageService().SendUnsend(m_Raw.Sender, ts, m_Raw.Sender);
+    }
+}
+
+void Message::SendReadReceipt() {
+    MarkAsRead();
+}
+
+bool Message::IsExpirationUpdate() const {
+    return m_Raw.IsExpirationUpdate;
+}
+
+int Message::GetExpirationTimer() const {
+    return m_Raw.ExpirationTimer;
+}
+
+int Message::GetExpirationType() const {
+    return m_Raw.ExpirationType;
 }
 
 // ─────────────────────────────────────────────────────────
@@ -211,19 +286,72 @@ void Client::Start() {
         if (raw.Type == Saf::MessageType::Reaction) {
             if (m_OnReaction) {
                 User reactor(this, raw.Sender);
-                // Create a "virtual" target message from the ID we have
                 Saf::Message targetRaw;
                 targetRaw.Id = raw.ReactionToId;
                 targetRaw.GroupId = raw.GroupId;
-                // If it's a DM, the reply should go back to the person in the conversation
                 if (raw.GroupId.empty()) {
                     targetRaw.Sender = raw.Sender;
                 }
-                
                 Message target(this, targetRaw);
                 m_OnReaction(reactor, target, raw.ReactionEmoji, !raw.IsReactionRemoval);
             }
-            return; // Don't trigger OnMessage for reactions
+            return;
+        }
+
+        // Typing indicators
+        if (raw.IsTypingStarted || raw.IsTypingStopped) {
+            if (m_OnTyping) {
+                User sender(this, raw.Sender);
+                m_OnTyping(sender, raw.IsTypingStarted);
+            }
+            return;
+        }
+
+        // Read receipts
+        if (raw.IsReadReceipt) {
+            if (m_OnReadReceipt) {
+                User sender(this, raw.Sender);
+                m_OnReadReceipt(sender, raw.ReceiptTimestamps);
+            }
+            return;
+        }
+
+        // Unsend requests
+        if (raw.IsUnsend) {
+            if (m_OnUnsend) {
+                User sender(this, raw.Sender);
+                int64_t ts = 0;
+                try { ts = std::stoll(raw.Id); } catch (...) {}
+                m_OnUnsend(sender, ts);
+            }
+            return;
+        }
+
+        // Data extraction notifications
+        if (raw.IsDataExtraction) {
+            if (m_OnDataExtraction) {
+                User sender(this, raw.Sender);
+                m_OnDataExtraction(sender, raw.ExtractionType);
+            }
+            return;
+        }
+
+        // Call messages
+        if (raw.IsCallMessage) {
+            if (m_OnCall) {
+                User sender(this, raw.Sender);
+                m_OnCall(sender, raw.CallType, raw.CallUuid);
+            }
+            return;
+        }
+
+        // Expiration updates
+        if (raw.IsExpirationUpdate) {
+            if (m_OnExpirationUpdate) {
+                User sender(this, raw.Sender);
+                m_OnExpirationUpdate(sender, raw.ExpirationTimer, raw.ExpirationType);
+            }
+            return;
         }
 
         if (m_OnMessage) {
@@ -288,6 +416,30 @@ void Client::OnReaction(ReactionCallback callback) {
     m_OnReaction = callback;
 }
 
+void Client::OnTyping(TypingCallback callback) {
+    m_OnTyping = callback;
+}
+
+void Client::OnReadReceipt(ReadReceiptCallback callback) {
+    m_OnReadReceipt = callback;
+}
+
+void Client::OnUnsend(UnsendCallback callback) {
+    m_OnUnsend = callback;
+}
+
+void Client::OnDataExtraction(DataExtractionCallback callback) {
+    m_OnDataExtraction = callback;
+}
+
+void Client::OnCall(CallCallback callback) {
+    m_OnCall = callback;
+}
+
+void Client::OnExpirationUpdate(ExpirationUpdateCallback callback) {
+    m_OnExpirationUpdate = callback;
+}
+
 Group Client::CreateGroup(const std::string& name) {
     auto g = m_Gm->Create(name);
     return Group(this, g.Id);
@@ -305,5 +457,32 @@ Saf::Account&        Client::GetAccount()        { return m_Account; }
 Saf::MessageService& Client::GetMessageService() { return *m_Ms; }
 Saf::GroupManager&   Client::GetGroupManager()   { return *m_Gm; }
 Saf::FileTransfer&   Client::GetFileTransfer()   { return *m_Ft; }
+Saf::SwarmManager&   Client::GetSwarmManager()   { return *m_Swarm; }
+
+// Communities (stubs - full implementation needs CommunityManager)
+void Client::JoinCommunity(const std::string& fullUrl) {
+    // TODO: Full community manager using session::config::Community from libsession-util
+    std::cout << "[Community] Joining: " << fullUrl << std::endl;
+}
+
+void Client::LeaveCommunity(const std::string& fullUrl) {
+    std::cout << "[Community] Would leave: " << fullUrl << std::endl;
+}
+
+std::vector<Saf::CommunityRoom> Client::GetCommunities() const {
+    return {}; // TODO: Full community manager
+}
+
+void Client::SendCommunityMessage(const std::string& fullUrl, const std::string& text) {
+    std::cout << "[Community] Would send message to " << fullUrl << ": " << text << std::endl;
+}
+
+void Client::SendCommunityFile(const std::string& fullUrl, const std::string& filePath) {
+    std::cout << "[Community] Would send file to " << fullUrl << std::endl;
+}
+
+Saf::OnsResult Client::ResolveOns(const std::string& onsName) {
+    return m_Swarm->ResolveOns(onsName);
+}
 
 } // namespace Session

@@ -121,8 +121,8 @@ endif()
 # ─────────────────────────────────────────────────────────
 # Target definition
 # ─────────────────────────────────────────────────────────
-set(SAF_SOURCES src/Account.cpp src/NetworkClient.cpp src/SwarmManager.cpp src/MessageService.cpp src/GroupManager.cpp src/FileTransfer.cpp src/ConfigManager.cpp src/OnionRouter.cpp src/Utils.cpp src/Session.cpp)
-set(SAF_HEADERS include/SessionAppFramework/SessionAppFramework.hpp include/SessionAppFramework/Session.hpp include/SessionAppFramework/Account.hpp include/SessionAppFramework/NetworkClient.hpp include/SessionAppFramework/SwarmManager.hpp include/SessionAppFramework/MessageService.hpp include/SessionAppFramework/GroupManager.hpp include/SessionAppFramework/FileTransfer.hpp include/SessionAppFramework/ConfigManager.hpp include/SessionAppFramework/OnionRouter.hpp include/SessionAppFramework/Types.hpp include/SessionAppFramework/Utils.hpp include/SessionAppFramework/Exceptions.hpp)
+set(SAF_SOURCES src/Account.cpp src/NetworkClient.cpp src/SwarmManager.cpp src/MessageService.cpp src/GroupManager.cpp src/FileTransfer.cpp src/ConfigManager.cpp src/OnionRouter.cpp src/Utils.cpp src/Session.cpp src/CommunityManager.cpp)
+set(SAF_HEADERS include/SessionAppFramework/SessionAppFramework.hpp include/SessionAppFramework/Session.hpp include/SessionAppFramework/Account.hpp include/SessionAppFramework/NetworkClient.hpp include/SessionAppFramework/SwarmManager.hpp include/SessionAppFramework/MessageService.hpp include/SessionAppFramework/GroupManager.hpp include/SessionAppFramework/FileTransfer.hpp include/SessionAppFramework/ConfigManager.hpp include/SessionAppFramework/OnionRouter.hpp include/SessionAppFramework/Types.hpp include/SessionAppFramework/Utils.hpp include/SessionAppFramework/Exceptions.hpp include/SessionAppFramework/CommunityManager.hpp)
 
 if(SAF_BUILD_SHARED)
     add_library(SessionAppFramework SHARED ${SAF_SOURCES} ${SAF_HEADERS})

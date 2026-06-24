@@ -263,27 +263,44 @@ std::string SwarmManager::StoreWithAuth(const AccountId& recipientId, const Byte
     };
 
     if (!authData.empty() && recipientId.substr(0, 2) == "03") {
-        auto sk = m_Impl->Account_.GetEd25519PrivateKey();
         Bytes groupPkHex = Utils::HexToBytes(recipientId.substr(2));
-        std::span<const unsigned char> sk_span(sk.data(), sk.size());
         std::span<const unsigned char> gpk_span(groupPkHex.data(), groupPkHex.size());
 
-        session::config::groups::Info dummyInfo(gpk_span, std::nullopt, std::nullopt);
-        session::config::groups::Members dummyMembers(gpk_span, std::nullopt, std::nullopt);
-        session::config::groups::Keys tempKeys(sk_span, gpk_span, std::nullopt, std::nullopt, dummyInfo, dummyMembers);
+        // If authData is 64 bytes, it's the group's Ed25519 secret key (admin signing directly)
+        if (authData.size() == 64) {
+            // Admin: sign the request with the group's Ed25519 key
+            std::string nsStr = (ns == 0) ? "" : std::to_string(ns);
+            std::string signMsg = std::string("store") + nsStr + std::to_string(now);
+            std::vector<unsigned char> sig(64);
+            crypto_sign_ed25519_detached(
+                sig.data(), nullptr,
+                reinterpret_cast<const unsigned char*>(signMsg.data()), signMsg.size(),
+                authData.data());
+            params["signature"] = Utils::Base64Encode(sig);
+            params["timestamp"] = now;
+            params["pubkey"] = recipientId;
+        } else {
+            // Non-admin: use subaccount auth
+            auto sk = m_Impl->Account_.GetEd25519PrivateKey();
+            std::span<const unsigned char> sk_span(sk.data(), sk.size());
 
-        std::string nsStr = (ns == 0) ? "" : std::to_string(ns);
-        std::string signMsg = std::string("store") + nsStr + std::to_string(now);
-        
-        auto auth = tempKeys.swarm_subaccount_sign(
-            std::span<const unsigned char>(reinterpret_cast<const uint8_t*>(signMsg.data()), signMsg.size()),
-            std::span<const unsigned char>(authData.data(), authData.size()),
-            false
-        );
+            session::config::groups::Info dummyInfo(gpk_span, std::nullopt, std::nullopt);
+            session::config::groups::Members dummyMembers(gpk_span, std::nullopt, std::nullopt);
+            session::config::groups::Keys tempKeys(sk_span, gpk_span, std::nullopt, std::nullopt, dummyInfo, dummyMembers);
 
-        params["subaccount"] = auth.subaccount;
-        params["subaccount_sig"] = auth.subaccount_sig;
-        params["signature"] = auth.signature;
+            std::string nsStr = (ns == 0) ? "" : std::to_string(ns);
+            std::string signMsg = std::string("store") + nsStr + std::to_string(now);
+            
+            auto auth = tempKeys.swarm_subaccount_sign(
+                std::span<const unsigned char>(reinterpret_cast<const uint8_t*>(signMsg.data()), signMsg.size()),
+                std::span<const unsigned char>(authData.data(), authData.size()),
+                false
+            );
+
+            params["subaccount"] = auth.subaccount;
+            params["subaccount_sig"] = auth.subaccount_sig;
+            params["signature"] = auth.signature;
+        }
     } else {
         std::string nsStr = (ns == 0) ? "" : std::to_string(ns);
         std::string sig = m_Impl->Account_.MakeSwarmAuthToken("store", nsStr, std::to_string(now));
@@ -308,8 +325,13 @@ std::string SwarmManager::StoreWithAuth(const AccountId& recipientId, const Byte
                     lastHash = hash;
                     successCount++;
                 }
+            } else {
+                std::string bodyStr(resp.Body.begin(), resp.Body.end());
+                std::cerr << "  [Store " << url << " HTTP " << resp.StatusCode << ": " << bodyStr.substr(0,200) << "]\n";
             }
-        } catch (...) {}
+        } catch (const std::exception& e) {
+            std::cerr << "  [Store exception: " << e.what() << "]\n";
+        }
     }
 
     if (successCount == 0) throw SwarmException(500, "Failed to store message on swarm");
@@ -416,6 +438,123 @@ void SwarmManager::Delete(const std::vector<std::string>& hashes, int ns) {
             if (resp.StatusCode == 200) return;
         } catch (...) {}
     }
+}
+
+// ─────────────────────────────────────────────────────────
+// Expire RPC
+// ─────────────────────────────────────────────────────────
+
+void SwarmManager::Expire(const std::vector<std::string>& hashes, int64_t expiryMs, int ns) {
+    if (hashes.empty()) return;
+    std::string myId = m_Impl->Account_.GetAccountId();
+    auto swarm = ResolveSwarm(myId);
+
+    int64_t now = GetNetworkTimeMs();
+    std::string nsStr = (ns == 0) ? "" : std::to_string(ns);
+    std::string sig = m_Impl->Account_.MakeSwarmAuthToken("expire", nsStr, std::to_string(now));
+
+    json params = {
+        {"pubkey",         myId},
+        {"pubkey_ed25519", Utils::ToUpper(Utils::BytesToHex(m_Impl->Account_.GetPublicKey()))},
+        {"messages",       hashes},
+        {"namespace",      ns},
+        {"expiry",         expiryMs},
+        {"timestamp",      now},
+        {"signature",      sig}
+    };
+
+    json req = {{"method", "expire"}, {"params", params}};
+
+    for (const auto& node : swarm) {
+        try {
+            std::string url = Impl::NodeUrl(node.Ip, node.Port, "/storage_rpc/v1");
+            auto resp = m_Impl->Net.PostJson(url, req.dump(), 5000);
+            if (resp.StatusCode == 200) return;
+        } catch (...) {}
+    }
+}
+
+// ─────────────────────────────────────────────────────────
+// Batch Requests
+// ─────────────────────────────────────────────────────────
+
+std::vector<SwarmManager::BatchSubResponse> SwarmManager::Batch(
+    const std::vector<BatchSubRequest>& requests,
+    const SessionNode& targetNode,
+    const std::string& batchMethod)
+{
+    json subRequests = json::array();
+    for (const auto& r : requests) {
+        subRequests.push_back({
+            {"method", r.Method},
+            {"params", r.Params}
+        });
+    }
+
+    int64_t now = GetNetworkTimeMs();
+    std::string sig = m_Impl->Account_.MakeSwarmAuthToken("batch", "", std::to_string(now));
+
+    json params = {
+        {"requests", subRequests}
+    };
+
+    json req = {{"method", batchMethod}, {"params", params}};
+
+    std::string url = Impl::NodeUrl(targetNode.Ip, targetNode.Port, "/storage_rpc/v1");
+    auto resp = m_Impl->Net.PostJson(url, req.dump(), 15000);
+
+    std::vector<BatchSubResponse> results;
+    if (resp.StatusCode == 200) {
+        try {
+            auto body = json::parse(Utils::BytesToString(resp.Body));
+            if (body.contains("result")) body = body["result"];
+            for (const auto& r : body["results"]) {
+                BatchSubResponse sr;
+                sr.StatusCode = r.value("code", 0);
+                sr.Body = r.value("body", json::object());
+                results.push_back(sr);
+            }
+        } catch (...) {}
+    }
+    return results;
+}
+
+// ─────────────────────────────────────────────────────────
+// ONS Resolution
+// ─────────────────────────────────────────────────────────
+
+OnsResult SwarmManager::ResolveOns(const std::string& onsName) {
+    if (m_Impl->NodeList.empty()) Bootstrap();
+
+    OnsResult result;
+
+    for (const auto& node : m_Impl->NodeList) {
+        try {
+            int64_t now = GetNetworkTimeMs();
+            json params = {
+                {"name", onsName},
+                {"timestamp", now}
+            };
+
+            // ONS requests are not authenticated
+            json req = {{"method", "ons_resolve"}, {"params", params}};
+            std::string url = Impl::NodeUrl(node.Ip, node.Port, "/storage_rpc/v1");
+            auto resp = m_Impl->Net.PostJson(url, req.dump(), 5000);
+
+            if (resp.StatusCode == 200) {
+                auto body = json::parse(Utils::BytesToString(resp.Body));
+                if (body.contains("result")) body = body["result"];
+
+                if (body.contains("session_id")) {
+                    result.SessionId = body["session_id"].get<std::string>();
+                    result.Found = true;
+                    result.Expiration = body.value("expiration", 0LL);
+                    return result;
+                }
+            }
+        } catch (...) {}
+    }
+    return result;
 }
 
 } // namespace Saf
