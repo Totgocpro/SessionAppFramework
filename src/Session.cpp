@@ -104,6 +104,10 @@ void Group::SendReadReceipt(const std::vector<int64_t>& timestamps) {
     m_Client->GetMessageService().SendReadReceipt(m_Id, timestamps);
 }
 
+Conversation Group::GetConversation() const {
+    return Conversation(m_Client, m_Id, true);
+}
+
 void Group::Leave() {
     m_Client->GetGroupManager().Leave(m_Id);
 }
@@ -157,6 +161,16 @@ bool Message::IsGroup() const {
 Group Message::GetGroup() const {
     if (!IsGroup()) throw std::runtime_error("Message is not from a group");
     return Group(m_Client, m_Raw.GroupId);
+}
+
+Conversation Message::GetConversation() const {
+    if (IsGroup()) {
+        return Conversation(m_Client, m_Raw.GroupId, true);
+    }
+    // For DMs, the conversation ID is the sender's ID (or recipient's for outgoing)
+    std::string convId = m_Raw.Sender;
+    if (convId == m_Client->GetMe().GetId()) convId = m_Raw.Recipient;
+    return Conversation(m_Client, convId, false);
 }
 
 bool Message::HasFile() const {
@@ -228,6 +242,72 @@ int Message::GetExpirationType() const {
 }
 
 // ─────────────────────────────────────────────────────────
+// Conversation Implementation
+// ─────────────────────────────────────────────────────────
+
+Conversation::Conversation(Client* client, const std::string& id, bool isGroup)
+    : m_Client(client), m_Id(id), m_IsGroup(isGroup) {}
+
+std::string Conversation::GetId() const { return m_Id; }
+
+std::string Conversation::GetName() const {
+    if (m_IsGroup) {
+        return m_Client->GetGroupManager().Get(m_Id).Name;
+    }
+    return m_Client->GetUser(m_Id).GetDisplayName();
+}
+
+bool Conversation::IsGroup() const { return m_IsGroup; }
+
+User Conversation::GetUser() const {
+    if (m_IsGroup) throw std::runtime_error("Conversation is a group");
+    return User(m_Client, m_Id);
+}
+
+Group Conversation::GetGroup() const {
+    if (!m_IsGroup) throw std::runtime_error("Conversation is not a group");
+    return Group(m_Client, m_Id);
+}
+
+void Conversation::SendMessage(const std::string& text) {
+    if (m_IsGroup) m_Client->GetMessageService().SendGroupText(m_Id, text);
+    else m_Client->GetMessageService().SendText(m_Id, text);
+}
+
+void Conversation::SendFile(const std::string& filePath) {
+    auto info = m_Client->GetFileTransfer().UploadFile(filePath);
+    if (m_IsGroup) m_Client->GetMessageService().SendGroupFile(m_Id, info);
+    else m_Client->GetMessageService().SendFile(m_Id, info);
+}
+
+void Conversation::SendVoice(const std::string& filePath) {
+    auto info = m_Client->GetFileTransfer().UploadFile(filePath, "audio/ogg");
+    if (m_IsGroup) m_Client->GetMessageService().SendGroupFile(m_Id, info);
+    else m_Client->GetMessageService().SendFile(m_Id, info);
+}
+
+void Conversation::SendTypingStarted() {
+    m_Client->GetMessageService().SendTypingStarted(m_Id);
+}
+
+void Conversation::SendTypingStopped() {
+    m_Client->GetMessageService().SendTypingStopped(m_Id);
+}
+
+void Conversation::SendReadReceipt(const std::vector<int64_t>& timestamps) {
+    m_Client->GetMessageService().SendReadReceipt(m_Id, timestamps);
+}
+
+std::vector<Message> Conversation::GetMessages(int limit) {
+    auto rawMessages = m_Client->GetMessageService().RetrieveConversation(m_Id, limit);
+    std::vector<Message> messages;
+    for (auto& raw : rawMessages) {
+        messages.emplace_back(m_Client, raw);
+    }
+    return messages;
+}
+
+// ─────────────────────────────────────────────────────────
 // Client Implementation
 // ─────────────────────────────────────────────────────────
 
@@ -274,13 +354,57 @@ void Client::Start() {
     pollCfg.MessageDbPath = m_MessageDbPath;
 
     m_Ms->OnMessage([this](const Saf::Message& raw) {
-        // Auto-join invites
+        // Group invite
         if (raw.Type == Saf::MessageType::GroupInvite) {
-            try {
-                m_Gm->Join(raw.GroupId, raw.GroupName, raw.MemberAuthData, raw.AdminSignature);
-                std::this_thread::sleep_for(std::chrono::seconds(1));
-                m_Ms->SendGroupInviteResponse(raw.GroupId, true);
-            } catch (...) {}
+            if (m_OnGroupInvite) {
+                Group group(this, raw.GroupId);
+                m_OnGroupInvite(group, raw.GroupName);
+            } else {
+                // Default: auto-join and accept
+                try {
+                    m_Gm->Join(raw.GroupId, raw.GroupName, raw.MemberAuthData, raw.AdminSignature);
+                    std::this_thread::sleep_for(std::chrono::seconds(1));
+                    m_Ms->SendGroupInviteResponse(raw.GroupId, true);
+                } catch (...) {}
+            }
+            return;
+        }
+
+        // Promoted to admin
+        if (raw.Type == Saf::MessageType::GroupPromotedToAdmin) {
+            if (m_OnGroupPromotedToAdmin) {
+                Group group(this, raw.GroupId);
+                m_OnGroupPromotedToAdmin(group);
+            }
+            return;
+        }
+
+        // Group info changed
+        if (raw.Type == Saf::MessageType::GroupInfoChanged) {
+            if (m_OnGroupInfoChanged) {
+                Group group(this, raw.GroupId);
+                m_OnGroupInfoChanged(group, raw.GroupInfoChangeType, raw.GroupInfoNewValue);
+            }
+            return;
+        }
+
+        // Group member left
+        if (raw.Type == Saf::MessageType::GroupMemberLeft) {
+            if (m_OnGroupMemberLeft) {
+                Group group(this, raw.GroupId);
+                User member(this, raw.Sender);
+                m_OnGroupMemberLeft(group, member, raw.IsMemberLeftNotification);
+            }
+            return;
+        }
+
+        // Message request response
+        if (raw.Type == Saf::MessageType::MessageRequestResponse) {
+            if (m_OnMessageRequestResponse) {
+                User sender(this, raw.Sender);
+                m_OnMessageRequestResponse(sender);
+            }
+            return;
         }
 
         if (raw.Type == Saf::MessageType::Reaction) {
@@ -440,6 +564,26 @@ void Client::OnExpirationUpdate(ExpirationUpdateCallback callback) {
     m_OnExpirationUpdate = callback;
 }
 
+void Client::OnGroupInvite(GroupInviteCallback callback) {
+    m_OnGroupInvite = callback;
+}
+
+void Client::OnGroupPromotedToAdmin(GroupPromotedToAdminCallback callback) {
+    m_OnGroupPromotedToAdmin = callback;
+}
+
+void Client::OnGroupInfoChanged(GroupInfoChangedCallback callback) {
+    m_OnGroupInfoChanged = callback;
+}
+
+void Client::OnGroupMemberLeft(GroupMemberLeftCallback callback) {
+    m_OnGroupMemberLeft = callback;
+}
+
+void Client::OnMessageRequestResponse(MessageRequestResponseCallback callback) {
+    m_OnMessageRequestResponse = callback;
+}
+
 Group Client::CreateGroup(const std::string& name) {
     auto g = m_Gm->Create(name);
     return Group(this, g.Id);
@@ -451,6 +595,11 @@ Group Client::GetGroup(const std::string& groupId) {
 
 User Client::GetUser(const std::string& userId) {
     return User(this, userId);
+}
+
+Conversation Client::GetConversation(const std::string& conversationId) {
+    bool isGroup = (conversationId.size() == 66 && conversationId.substr(0, 2) == "03");
+    return Conversation(this, conversationId, isGroup);
 }
 
 Saf::Account&        Client::GetAccount()        { return m_Account; }

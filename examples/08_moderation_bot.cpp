@@ -91,6 +91,23 @@ public:
             }
         });
 
+        m_Client.OnGroupPromotedToAdmin([this](Session::Group group) {
+            std::cout << "[Bot] ===== PROMOTED TO ADMIN =====\n";
+            std::cout << "[Bot] Group ID:  " << group.GetId() << "\n";
+            std::cout << "[Bot] Name:      " << group.GetName() << "\n";
+            std::cout << "[Bot] Admin:     " << (group.IsAdmin() ? "YES" : "NO") << "\n";
+            std::cout << "[Bot] Members:   " << group.GetMembers().size() << "\n";
+            group.SendMessage("ModBot is now admin. Use /help for commands.");
+            if (g_Verbose) {
+                json j;
+                j["event"] = "promoted";
+                j["groupId"] = group.GetId();
+                j["groupName"] = group.GetName();
+                j["admin"] = group.IsAdmin();
+                LogJson("ModAction", j);
+            }
+        });
+
         m_Client.Start();
         LoadState();
         std::cout << "ModBot started: " << m_Client.GetMnemonic() << "\n";
@@ -155,48 +172,6 @@ public:
 
 private:
     void HandleMessage(Session::Message& msg) {
-        auto content = msg.GetContent();
-
-        // Check for admin promotion system message
-        if (content.find("[Promoted to Admin]") != std::string::npos) {
-            std::cout << "[Bot] ===== PROMOTED TO ADMIN =====\n";
-            if (msg.IsGroup()) {
-                try {
-                    auto g = msg.GetGroup();
-                    std::cout << "[Bot] Group ID:  " << g.GetId() << "\n";
-                    std::cout << "[Bot] Name:      " << g.GetName() << "\n";
-                    std::cout << "[Bot] Admin:     " << (g.IsAdmin() ? "YES" : "NO") << "\n";
-                    std::cout << "[Bot] Members:   " << g.GetMembers().size() << "\n";
-                    g.SendMessage("ModBot is now admin. Use /help for commands.");
-                    if (g_Verbose) {
-                        json j;
-                        j["event"] = "promoted";
-                        j["groupId"] = g.GetId();
-                        j["groupName"] = g.GetName();
-                        j["admin"] = g.IsAdmin();
-                        LogJson("ModAction", j);
-                    }
-                } catch (const std::exception& e) {
-                    std::cout << "[Bot] Error getting group: " << e.what() << "\n";
-                }
-            } else {
-                // Fallback: scan all groups to find which one we're now admin of
-                auto groups = m_Client.GetGroupManager().GetAll();
-                bool found = false;
-                for (const auto& g : groups) {
-                    if (g.IsAdmin) {
-                        std::cout << "[Bot] Group: " << g.Name << " (" << g.Id << ")\n";
-                        std::cout << "[Bot] Members: " << g.Members.size() << "\n";
-                        found = true;
-                    }
-                }
-                if (!found) {
-                    std::cout << "[Bot] No admin groups found yet (config sync pending)\n";
-                }
-            }
-            return;
-        }
-
         if (msg.IsGroup()) {
             HandleGroupMessage(msg);
         } else {

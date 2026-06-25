@@ -11,6 +11,7 @@ namespace Session {
 
 // Forward declarations
 class Client;
+class Conversation;
 class Group;
 class Message;
 
@@ -59,6 +60,8 @@ public:
     void SendReadReceipt(const std::vector<int64_t>& timestamps = {});
     void Leave();
     
+    Conversation GetConversation() const;
+
     // Management (Admin only)
     void SetName(const std::string& name);
     void SetDescription(const std::string& description);
@@ -74,6 +77,37 @@ private:
 };
 
 // ─────────────────────────────────────────────────────────
+// Conversation (DM or Group)
+// ─────────────────────────────────────────────────────────
+class Conversation {
+public:
+    Conversation(Client* client, const std::string& id, bool isGroup);
+
+    std::string GetId() const;
+    std::string GetName() const;   // DM: display name of the other user, Group: group name
+    bool        IsGroup() const;
+
+    User  GetUser() const;   // throws if IsGroup()
+    Group GetGroup() const;  // throws if !IsGroup()
+
+    // Send messages
+    void SendMessage(const std::string& text);
+    void SendFile(const std::string& filePath);
+    void SendVoice(const std::string& filePath);
+    void SendTypingStarted();
+    void SendTypingStopped();
+    void SendReadReceipt(const std::vector<int64_t>& timestamps = {});
+
+    // Retrieve recent messages from the network (does not fire OnMessage callbacks)
+    std::vector<Message> GetMessages(int limit = 50);
+
+private:
+    Client* m_Client;
+    std::string m_Id;
+    bool m_IsGroup;
+};
+
+// ─────────────────────────────────────────────────────────
 // Message
 // ─────────────────────────────────────────────────────────
 class Message {
@@ -85,7 +119,8 @@ public:
     User        GetAuthor() const;
     bool        IsGroup() const;
     Group       GetGroup() const; // Throws if not a group message
-    
+    Conversation GetConversation() const;
+
     // Attachments
     bool        HasFile() const;
     std::string GetFileName() const;
@@ -103,6 +138,8 @@ public:
     int GetExpirationType() const;  // 0=none, 1=delete_after_read, 2=delete_after_send
 
 private:
+    friend class Client;
+    friend class Conversation;
     Client* m_Client;
     Saf::Message m_Raw;
 };
@@ -139,6 +176,11 @@ public:
     using DataExtractionCallback = std::function<void(User sender, int extractionType)>;
     using CallCallback = std::function<void(User sender, int callType, const std::string& uuid)>;
     using ExpirationUpdateCallback = std::function<void(User sender, uint32_t timer, int type)>;
+    using GroupInviteCallback = std::function<void(Group group, const std::string& name)>;
+    using GroupPromotedToAdminCallback = std::function<void(Group group)>;
+    using GroupInfoChangedCallback = std::function<void(Group group, int changeType, const std::string& newValue)>;
+    using GroupMemberLeftCallback = std::function<void(Group group, User member, bool isNotification)>;
+    using MessageRequestResponseCallback = std::function<void(User sender)>;
 
     void OnMessage(MessageCallback callback);
     void OnReaction(ReactionCallback callback);
@@ -148,11 +190,17 @@ public:
     void OnDataExtraction(DataExtractionCallback callback);
     void OnCall(CallCallback callback);
     void OnExpirationUpdate(ExpirationUpdateCallback callback);
+    void OnGroupInvite(GroupInviteCallback callback);
+    void OnGroupPromotedToAdmin(GroupPromotedToAdminCallback callback);
+    void OnGroupInfoChanged(GroupInfoChangedCallback callback);
+    void OnGroupMemberLeft(GroupMemberLeftCallback callback);
+    void OnMessageRequestResponse(MessageRequestResponseCallback callback);
 
     // Factory / Accessors
     Group CreateGroup(const std::string& name);
     Group GetGroup(const std::string& groupId);
     User  GetUser(const std::string& userId);
+    Conversation GetConversation(const std::string& conversationId);
 
     // Communities / Open Groups
     void JoinCommunity(const std::string& fullUrl);
@@ -194,6 +242,11 @@ private:
     DataExtractionCallback m_OnDataExtraction;
     CallCallback m_OnCall;
     ExpirationUpdateCallback m_OnExpirationUpdate;
+    GroupInviteCallback m_OnGroupInvite;
+    GroupPromotedToAdminCallback m_OnGroupPromotedToAdmin;
+    GroupInfoChangedCallback m_OnGroupInfoChanged;
+    GroupMemberLeftCallback m_OnGroupMemberLeft;
+    MessageRequestResponseCallback m_OnMessageRequestResponse;
     Saf::SelfProfile m_Profile;
     std::string      m_MessageDbPath = "messages.db";
     std::atomic<bool> m_Running{false};

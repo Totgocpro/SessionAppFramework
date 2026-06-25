@@ -18,6 +18,7 @@
 #include <mutex>
 #include <vector>
 #include <functional>
+#include <optional>
 #include <stdexcept>
 #include <iostream>
 #include <set>
@@ -152,15 +153,10 @@ struct MessageService::Impl {
         for (auto& cb : callbacks) cb(e);
     }
 
-    bool TryProcessPlaintext(const std::vector<uint8_t>& plaintext, const std::string& senderId, const std::string& conversationId, const std::string& hash, int64_t storageTs, int64_t envelopeTs) {
-        {
-            std::lock_guard<std::mutex> lock(Mutex);
-            if (m_ProcessedMessages.count(hash)) return true;
-        }
-
+    std::optional<Message> ParseContentToMessage(const std::vector<uint8_t>& plaintext, const std::string& senderId, const std::string& conversationId, int64_t envelopeTs) {
         try {
             SessionProtos::Content content;
-            if (!content.ParseFromArray(plaintext.data(), plaintext.size())) return false;
+            if (!content.ParseFromArray(plaintext.data(), plaintext.size())) return std::nullopt;
 
             Message msg;
             msg.Sender    = senderId;
@@ -230,19 +226,20 @@ struct MessageService::Impl {
                         msg.Body = "Invited to group: " + msg.GroupName;
                     } else if (gum.has_infochangemessage()) {
                         const auto& ic = gum.infochangemessage();
-                        msg.Type = MessageType::Control;
+                        msg.Type = MessageType::GroupInfoChanged;
                         msg.GroupId = conversationId;
                         if (ic.type() == SessionProtos::GroupUpdateInfoChangeMessage_Type_NAME) {
-                            msg.Body = "[Group Name Changed to: " + ic.updatedname() + "]";
+                            msg.GroupInfoChangeType = 1;
+                            msg.GroupInfoNewValue = ic.updatedname();
                         } else if (ic.type() == SessionProtos::GroupUpdateInfoChangeMessage_Type_AVATAR) {
-                            msg.Body = "[Group Avatar Changed]";
+                            msg.GroupInfoChangeType = 2;
                         } else if (ic.type() == SessionProtos::GroupUpdateInfoChangeMessage_Type_DISAPPEARING_MESSAGES) {
+                            msg.GroupInfoChangeType = 3;
                             msg.ExpirationTimer = ic.updatedexpiration();
-                            msg.Body = "[Disappearing Messages Changed]";
+                            msg.GroupInfoNewValue = std::to_string(ic.updatedexpiration());
                         }
                     } else if (gum.has_promotemessage()) {
-                        msg.Type = MessageType::Control;
-                        msg.Body = "[Promoted to Admin]";
+                        msg.Type = MessageType::GroupPromotedToAdmin;
                         const auto& pm = gum.promotemessage();
                         auto seedBytes = pm.groupidentityseed();
                         if (!seedBytes.empty()) {
@@ -260,11 +257,11 @@ struct MessageService::Impl {
                             msg.GroupId = conversationId;
                         }
                     } else if (gum.has_memberleftmessage()) {
-                        msg.Type = MessageType::Control;
-                        msg.Body = "[Member Left]";
+                        msg.Type = MessageType::GroupMemberLeft;
+                        msg.IsMemberLeftNotification = false;
                     } else if (gum.has_memberleftnotificationmessage()) {
-                        msg.Type = MessageType::Control;
-                        msg.Body = "[Member Left Notification]";
+                        msg.Type = MessageType::GroupMemberLeft;
+                        msg.IsMemberLeftNotification = true;
                     }
                 }
             } else if (content.has_typingmessage()) {
@@ -301,21 +298,109 @@ struct MessageService::Impl {
                 msg.CallUuid = cm.uuid();
                 msg.Body = "[Call Message]";
             } else if (content.has_messagerequestresponse()) {
-                msg.Body = "[Message Request Response]";
+                msg.Type = MessageType::MessageRequestResponse;
             } else {
-                return true; 
+                return std::nullopt;
             }
 
-            FireMessage(msg);
-            {
-                std::lock_guard<std::mutex> lock(Mutex);
-                m_ProcessedMessages[hash] = storageTs;
-            }
-            SaveMessageDb();
-            return true;
+            return msg;
         } catch (...) {
-            return false;
+            return std::nullopt;
         }
+    }
+
+    bool TryProcessPlaintext(const std::vector<uint8_t>& plaintext, const std::string& senderId, const std::string& conversationId, const std::string& hash, int64_t storageTs, int64_t envelopeTs) {
+        {
+            std::lock_guard<std::mutex> lock(Mutex);
+            if (m_ProcessedMessages.count(hash)) return true;
+        }
+
+        auto msgOpt = ParseContentToMessage(plaintext, senderId, conversationId, envelopeTs);
+        if (!msgOpt) return false;
+
+        FireMessage(*msgOpt);
+        {
+            std::lock_guard<std::mutex> lock(Mutex);
+            m_ProcessedMessages[hash] = storageTs;
+        }
+        SaveMessageDb();
+        return true;
+    }
+
+    std::optional<Message> DecryptSingleEnvelope(const SwarmManager::RawEnvelope& env, const std::string& conversationId) {
+        auto sk = Account_.GetEd25519PrivateKey();
+        std::vector<uint8_t> sk_vec(sk.begin(), sk.end());
+        std::span<const uint8_t> sk_span(sk_vec.data(), sk_vec.size());
+
+        session::DecodeEnvelopeKey keys = {};
+        session::array_uc32 pro_backend_pk = {};
+
+        // Strategy 1: Group decryption (V2 groups)
+        if (conversationId.size() == 66 && conversationId.substr(0, 2) == "03") {
+            try {
+                auto encKeyBytes = GroupMgr.GetEncryptionKey(conversationId);
+                if (!encKeyBytes.empty()) {
+                    session::cleared_uc32 groupEncKey;
+                    std::copy_n(encKeyBytes.begin(), 32, groupEncKey.begin());
+                    std::vector<std::span<const uint8_t>> group_keys_list = { groupEncKey };
+                    keys.decrypt_keys = group_keys_list;
+
+                    session::array_uc32 groupPk;
+                    oxenc::from_hex(conversationId.begin() + 2, conversationId.end(), groupPk.begin());
+                    keys.group_ed25519_pubkey = groupPk;
+
+                    auto decoded = session::decode_envelope(keys, std::span<const uint8_t>(env.Data.data(), env.Data.size()), pro_backend_pk);
+                    std::string senderId = "05" + oxenc::to_hex(decoded.sender_x25519_pubkey);
+                    int64_t envTs = decoded.envelope.timestamp.count();
+                    auto msg = ParseContentToMessage(Bytes(decoded.content_plaintext.begin(), decoded.content_plaintext.end()), senderId, conversationId, envTs);
+                    if (msg) return msg;
+                }
+            } catch (...) {}
+        }
+
+        // Strategy 2-4: Use own key
+        std::vector<std::span<const uint8_t>> keys_list = {sk_span};
+        keys.decrypt_keys = keys_list;
+        keys.group_ed25519_pubkey = std::nullopt;
+
+        // Strategy 2: bt-encoded list of envelopes
+        try {
+            oxenc::bt_dict_consumer dict(std::string_view(reinterpret_cast<const char*>(env.Data.data()), env.Data.size()));
+            if (dict.skip_until("e")) {
+                auto list = dict.consume_list_consumer();
+                while (!list.is_finished()) {
+                    auto blob_view = list.consume_string_view();
+                    try {
+                        auto decoded = session::decode_envelope(keys, std::span<const uint8_t>(reinterpret_cast<const uint8_t*>(blob_view.data()), blob_view.size()), pro_backend_pk);
+                        std::string senderId = "05" + oxenc::to_hex(decoded.sender_x25519_pubkey);
+                        int64_t envTs = decoded.envelope.timestamp.count();
+                        auto msg = ParseContentToMessage(Bytes(decoded.content_plaintext.begin(), decoded.content_plaintext.end()), senderId, conversationId, envTs);
+                        if (msg) return msg;
+                    } catch (...) {}
+                }
+            }
+        } catch (...) {}
+
+        // Strategy 3: Single envelope decode
+        try {
+            auto decoded = session::decode_envelope(keys, std::span<const uint8_t>(env.Data.data(), env.Data.size()), pro_backend_pk);
+            std::string senderId = "05" + oxenc::to_hex(decoded.sender_x25519_pubkey);
+            int64_t envTs = decoded.envelope.timestamp.count();
+            auto msg = ParseContentToMessage(Bytes(decoded.content_plaintext.begin(), decoded.content_plaintext.end()), senderId, conversationId, envTs);
+            if (msg) return msg;
+        } catch (...) {}
+
+        // Strategy 4: decrypt_incoming_session_id (Legacy)
+        try {
+            auto [plaintext_vec, senderId] = session::decrypt_incoming_session_id(
+                std::span<const unsigned char>(sk.data(), sk.size()),
+                std::span<const unsigned char>(env.Data.data(), env.Data.size())
+            );
+            auto msg = ParseContentToMessage(plaintext_vec, senderId, conversationId, env.Timestamp);
+            if (msg) return msg;
+        } catch (...) {}
+
+        return std::nullopt;
     }
 
     void ProcessEnvelopes(const std::vector<SwarmManager::RawEnvelope>& envelopes, const std::string& conversationId) {
@@ -325,99 +410,11 @@ struct MessageService::Impl {
 
         for (const auto& env : envelopes) {
             if (!Running.load()) break;
-
             if (env.Timestamp > LastSeenTs) LastSeenTs = env.Timestamp;
 
-            bool processed = false;
-            auto sk = Account_.GetEd25519PrivateKey(); // 64 bytes
-            std::vector<uint8_t> sk_vec(sk.begin(), sk.end());
-            std::span<const uint8_t> sk_span(sk_vec.data(), sk_vec.size());
-            
-            session::DecodeEnvelopeKey keys = {};
-            session::array_uc32 pro_backend_pk = {};
-
-            if (conversationId.size() == 66 && conversationId.substr(0, 2) == "03") {
-                try {
-                    auto encKeyBytes = GroupMgr.GetEncryptionKey(conversationId);
-                    if (encKeyBytes.empty()) {
-                        // std::cout << "[DEBUG] No encryption key for group: " << conversationId << "\n"; When you just join a group, or receve a message when the bot was offline
-                    } else {
-                        session::cleared_uc32 groupEncKey;
-                        std::copy_n(encKeyBytes.begin(), 32, groupEncKey.begin());
-                        
-                        std::vector<std::span<const uint8_t>> group_keys_list = { groupEncKey };
-                        keys.decrypt_keys = group_keys_list;
-                        
-                        session::array_uc32 groupPk;
-                        oxenc::from_hex(conversationId.begin() + 2, conversationId.end(), groupPk.begin());
-                        keys.group_ed25519_pubkey = groupPk;
-
-                        auto decoded = session::decode_envelope(keys, std::span<const uint8_t>(env.Data.data(), env.Data.size()), pro_backend_pk);
-                        std::string senderId = "05" + oxenc::to_hex(decoded.sender_x25519_pubkey);
-                        int64_t envTs = decoded.envelope.timestamp.count();
-                        if (TryProcessPlaintext(Bytes(decoded.content_plaintext.begin(), decoded.content_plaintext.end()), senderId, conversationId, env.Hash, env.Timestamp, envTs)) {
-                            processed = true;
-                        }
-                    }
-                } catch (const std::exception& e) {
-                    // std::cout << "[DEBUG] Group decryption failed for " << conversationId << ": " << e.what() << "\n";
-                }
-            }
-
-            if (processed) {
-                hashesToDelete.push_back(env.Hash);
-                continue;
-            }
-
-            std::vector<std::span<const uint8_t>> keys_list = {sk_span};
-            keys.decrypt_keys = keys_list;
-            keys.group_ed25519_pubkey = std::nullopt;
-
-            try {
-                oxenc::bt_dict_consumer dict(std::string_view(reinterpret_cast<const char*>(env.Data.data()), env.Data.size()));
-                if (dict.skip_until("e")) {
-                    auto list = dict.consume_list_consumer();
-                    while (!list.is_finished()) {
-                        auto blob_view = list.consume_string_view();
-                        try {
-                            auto decoded = session::decode_envelope(keys, std::span<const uint8_t>(reinterpret_cast<const uint8_t*>(blob_view.data()), blob_view.size()), pro_backend_pk);
-                            std::string senderId = "05" + oxenc::to_hex(decoded.sender_x25519_pubkey);
-                            int64_t envTs = decoded.envelope.timestamp.count();
-                            if (TryProcessPlaintext(Bytes(decoded.content_plaintext.begin(), decoded.content_plaintext.end()), senderId, conversationId, env.Hash, env.Timestamp, envTs)) {
-                                processed = true;
-                                break;
-                            }
-                        } catch (...) {}
-                    }
-                }
-            } catch (...) {}
-
-            if (processed) {
-                hashesToDelete.push_back(env.Hash);
-                continue;
-            }
-
-            try {
-                auto decoded = session::decode_envelope(keys, std::span<const uint8_t>(env.Data.data(), env.Data.size()), pro_backend_pk);
-                std::string senderId = "05" + oxenc::to_hex(decoded.sender_x25519_pubkey);
-                int64_t envTs = decoded.envelope.timestamp.count();
-                if (TryProcessPlaintext(Bytes(decoded.content_plaintext.begin(), decoded.content_plaintext.end()), senderId, conversationId, env.Hash, env.Timestamp, envTs)) processed = true;
-            } catch (...) {}
-
-            if (processed) {
-                hashesToDelete.push_back(env.Hash);
-                continue;
-            }
-
-            try {
-                auto [plaintext_vec, senderId] = session::decrypt_incoming_session_id(
-                    std::span<const unsigned char>(sk.data(), sk.size()),
-                    std::span<const unsigned char>(env.Data.data(), env.Data.size())
-                );
-                if (TryProcessPlaintext(plaintext_vec, senderId, conversationId, env.Hash, env.Timestamp, env.Timestamp)) processed = true;
-            } catch (...) {}
-
-            if (processed) {
+            auto msgOpt = DecryptSingleEnvelope(env, conversationId);
+            if (msgOpt) {
+                FireMessage(*msgOpt);
                 hashesToDelete.push_back(env.Hash);
             }
         }
@@ -436,6 +433,33 @@ struct MessageService::Impl {
             m_LastHashes[conversationId] = envelopes.back().Hash;
         }
         SaveMessageDb();
+    }
+
+    std::vector<Message> RetrieveConversationMessages(const std::string& conversationId, int limit) {
+        std::string lastHash;
+        int ns = Config.Namespace;
+        if (conversationId.size() == 66) {
+            if (conversationId.substr(0, 2) == "03") ns = 11;
+            else if (conversationId.substr(0, 2) == "05") ns = 1;
+        }
+
+        std::vector<SwarmManager::RawEnvelope> envelopes;
+        if (conversationId.size() == 66 && conversationId.substr(0, 2) == "03") {
+            Bytes authData = GroupMgr.GetAuthData(conversationId);
+            envelopes = Swarm.RetrieveWithAuth(conversationId, ns, lastHash, authData);
+        } else {
+            envelopes = Swarm.Retrieve(conversationId, ns, lastHash);
+        }
+
+        std::vector<Message> messages;
+        for (const auto& env : envelopes) {
+            auto msgOpt = DecryptSingleEnvelope(env, conversationId);
+            if (msgOpt) {
+                messages.push_back(*msgOpt);
+                if (static_cast<int>(messages.size()) >= limit) break;
+            }
+        }
+        return messages;
     }
 
     void DoPoll() {
@@ -851,6 +875,10 @@ bool MessageService::IsPolling() const { return m_Impl->Running.load(); }
 std::vector<Message> MessageService::PollOnce() {
     m_Impl->DoPoll();
     return {}; 
+}
+
+std::vector<Message> MessageService::RetrieveConversation(const std::string& conversationId, int limit) {
+    return m_Impl->RetrieveConversationMessages(conversationId, limit);
 }
 
 int64_t MessageService::GetLastSeenTimestamp() const { return m_Impl->LastSeenTs; }

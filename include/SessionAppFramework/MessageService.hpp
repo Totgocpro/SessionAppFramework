@@ -254,6 +254,19 @@ public:
      */
     std::vector<Message> PollOnce();
 
+    /**
+     * @brief Retrieves recent unread messages for a specific conversation from the network.
+     *
+     * Unlike PollOnce() which fires OnMessage callbacks and deletes envelopes,
+     * this method returns messages directly without firing callbacks or deleting
+     * from the swarm. Useful for catching up on a conversation's history.
+     *
+     * @param conversationId  Account ID (DM) or Group ID.
+     * @param limit           Maximum number of messages to return (default: 50).
+     * @return List of decrypted messages.
+     */
+    std::vector<Message> RetrieveConversation(const std::string& conversationId, int limit = 50);
+
     // ─────────────────────────────────────────────────────────
     // History
     // ─────────────────────────────────────────────────────────

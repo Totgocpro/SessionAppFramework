@@ -37,6 +37,10 @@ enum class MessageType {
     Call,
     ExpirationUpdate,
     OpenGroup,
+    GroupPromotedToAdmin,       // local account promoted to admin in a group
+    GroupInfoChanged,           // group name / avatar / disappearing messages changed
+    GroupMemberLeft,            // a member left the group
+    MessageRequestResponse,     // response to a message request
 };
 
 struct Message {
@@ -90,6 +94,13 @@ struct Message {
     int             ExpirationTimer   = 0; // seconds, 0 = none
     int             ExpirationType    = 0; // 0=unknown, 1=delete_after_read, 2=delete_after_send
     bool            IsExpirationUpdate = false;
+
+    // Group info change
+    int             GroupInfoChangeType = 0; // 1=name, 2=avatar, 3=disappearing_messages
+    std::string     GroupInfoNewValue;       // new name / timer string
+
+    // Member left notification (vs direct member left)
+    bool            IsMemberLeftNotification = false;
 
     // Sync target (multi-device)
     std::string     SyncTarget;
