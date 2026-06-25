@@ -354,27 +354,38 @@ std::vector<SwarmManager::RawEnvelope> SwarmManager::RetrieveWithAuth(const Acco
     if (!lastHash.empty()) params["last_hash"] = lastHash;
 
     if (!authData.empty() && targetId.substr(0, 2) == "03") {
-        auto sk = m_Impl->Account_.GetEd25519PrivateKey();
-        Bytes groupPkHex = Utils::HexToBytes(targetId.substr(2));
-        std::span<const unsigned char> sk_span(sk.data(), sk.size());
-        std::span<const unsigned char> gpk_span(groupPkHex.data(), groupPkHex.size());
-
-        session::config::groups::Info dummyInfo(gpk_span, std::nullopt, std::nullopt);
-        session::config::groups::Members dummyMembers(gpk_span, std::nullopt, std::nullopt);
-        session::config::groups::Keys tempKeys(sk_span, gpk_span, std::nullopt, std::nullopt, dummyInfo, dummyMembers);
-
         std::string nsStr = (ns == 0) ? "" : std::to_string(ns);
         std::string signMsg = std::string("retrieve") + nsStr + std::to_string(now);
-        
-        auto auth = tempKeys.swarm_subaccount_sign(
-            std::span<const unsigned char>(reinterpret_cast<const uint8_t*>(signMsg.data()), signMsg.size()),
-            std::span<const unsigned char>(authData.data(), authData.size()),
-            false
-        );
 
-        params["subaccount"] = auth.subaccount;
-        params["subaccount_sig"] = auth.subaccount_sig;
-        params["signature"] = auth.signature;
+        if (authData.size() == 64) {
+            // Admin: sign with group's Ed25519 key
+            std::vector<unsigned char> sig(64);
+            crypto_sign_ed25519_detached(
+                sig.data(), nullptr,
+                reinterpret_cast<const unsigned char*>(signMsg.data()), signMsg.size(),
+                authData.data());
+            params["signature"] = Utils::Base64Encode(sig);
+        } else {
+            // Non-admin: use subaccount auth
+            auto sk = m_Impl->Account_.GetEd25519PrivateKey();
+            Bytes groupPkHex = Utils::HexToBytes(targetId.substr(2));
+            std::span<const unsigned char> sk_span(sk.data(), sk.size());
+            std::span<const unsigned char> gpk_span(groupPkHex.data(), groupPkHex.size());
+
+            session::config::groups::Info dummyInfo(gpk_span, std::nullopt, std::nullopt);
+            session::config::groups::Members dummyMembers(gpk_span, std::nullopt, std::nullopt);
+            session::config::groups::Keys tempKeys(sk_span, gpk_span, std::nullopt, std::nullopt, dummyInfo, dummyMembers);
+
+            auto auth = tempKeys.swarm_subaccount_sign(
+                std::span<const unsigned char>(reinterpret_cast<const uint8_t*>(signMsg.data()), signMsg.size()),
+                std::span<const unsigned char>(authData.data(), authData.size()),
+                false
+            );
+
+            params["subaccount"] = auth.subaccount;
+            params["subaccount_sig"] = auth.subaccount_sig;
+            params["signature"] = auth.signature;
+        }
     } else {
         std::string nsStr = (ns == 0) ? "" : std::to_string(ns);
         std::string sig = m_Impl->Account_.MakeSwarmAuthToken("retrieve", nsStr, std::to_string(now));

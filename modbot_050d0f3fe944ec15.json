@@ -1,0 +1,10 @@
+{
+  "groups": {
+    "03b0395c32ffaaf2119501b0f2eecd6b86c2be9f5226ac3d7d988b26bc26e9e3c3": [
+      {
+        "pattern": "\\btest\\b",
+        "reason": "Word match"
+      }
+    ]
+  }
+}

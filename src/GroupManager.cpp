@@ -162,8 +162,12 @@ struct GroupManager::Impl {
                      session::config::ConfigBase& cfg,
                      int ns) {
         Bytes authData;
-        if (groupId.substr(0, 2) == "03" && !IsAdmin(groupId)) {
-            authData = Config.GetGroupAuthData(groupId);
+        if (groupId.substr(0, 2) == "03") {
+            authData = GetGroupAuthData(groupId);
+            if (authData.empty())
+                authData = Config.GetGroupAdminKey(groupId);
+            if (authData.empty())
+                authData = Config.GetGroupAuthData(groupId);
         }
 
         auto envelopes = Swarm.RetrieveWithAuth(groupId, ns, "", authData);
@@ -178,8 +182,10 @@ struct GroupManager::Impl {
         if (!b.Keys) return;
         
         Bytes authData;
-        if (groupId.substr(0, 2) == "03" && b.AdminKey.empty()) {
-            authData = Config.GetGroupAuthData(groupId);
+        if (groupId.substr(0, 2) == "03") {
+            authData = Config.GetGroupAdminKey(groupId);
+            if (authData.empty())
+                authData = Config.GetGroupAuthData(groupId);
         }
 
         auto envelopes = Swarm.RetrieveWithAuth(groupId, NS_GROUP_KEYS, "", authData);
@@ -458,6 +464,53 @@ void GroupManager::Leave(const std::string& groupId) {
     m_Impl->Config.RemoveGroupEntry(groupId);
     m_Impl->Config.PushNamespace(5);
     m_Impl->Groups.erase(groupId);
+}
+
+// ─────────────────────────────────────────────────────────
+// Admin key storage (for accepting promotion)
+// ─────────────────────────────────────────────────────────
+
+void GroupManager::StoreAdminKey(const std::string& groupId, const Bytes& seed) {
+    if (groupId.substr(0, 2) != "03") return;
+    if (seed.size() != 32 && seed.size() != 64) return;
+
+    Bytes gpk = Utils::HexToBytes(groupId.substr(2));
+    std::span<const unsigned char> gpk_span{ gpk.data(), gpk.size() };
+
+    // Derive full 64-byte secret key from the 32-byte seed
+    auto [pk, sk] = session::ed25519::ed25519_key_pair(
+        std::span<const unsigned char>(seed.data(), 32));
+    Bytes adminKey(sk.begin(), sk.end());
+
+    // Ensure the group bundle exists (might already be loaded from invite)
+    if (m_Impl->Groups.find(groupId) == m_Impl->Groups.end()) {
+        GroupBundle b;
+        b.GroupPubKey = gpk;
+        b.Info = std::make_unique<session::config::groups::Info>(
+            gpk_span, std::nullopt, std::nullopt);
+        b.Members = std::make_unique<session::config::groups::Members>(
+            gpk_span, std::nullopt, std::nullopt);
+        auto user_sk = m_Impl->Account_.GetEd25519PrivateKey();
+        std::span<const unsigned char> user_sk_span{ user_sk.data(), user_sk.size() };
+        b.Keys = std::make_unique<session::config::groups::Keys>(
+            user_sk_span, gpk_span, std::nullopt, std::nullopt, *b.Info, *b.Members);
+        m_Impl->Groups[groupId] = std::move(b);
+    }
+
+    auto& bundle = m_Impl->Groups[groupId];
+    bundle.AdminKey = adminKey;
+    bundle.Keys->load_admin_key(
+        std::span<const unsigned char>(seed.data(), 32), *bundle.Info, *bundle.Members);
+
+    // Persist to UserGroups config
+    m_Impl->Config.AddGroupEntry(groupId, "", adminKey);
+    m_Impl->Config.PushNamespace(5);
+
+    // Push the admin key to the Keys namespace so other devices can sync
+    if (auto pending = bundle.Keys->pending_config()) {
+        m_Impl->Swarm.StoreWithAuth(groupId, Bytes(pending->begin(), pending->end()),
+            Impl::NS_GROUP_KEYS, 30LL * 24 * 3600 * 1000, adminKey);
+    }
 }
 
 // ─────────────────────────────────────────────────────────

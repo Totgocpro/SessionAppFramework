@@ -6,6 +6,7 @@
 #include <session/session_encrypt.hpp>
 #include <session/session_protocol.hpp>
 #include <session/config/user_profile.hpp>
+#include <session/ed25519.hpp>
 #include <SessionProtos.pb.h>
 #include <oxenc/bt_serialize.h>
 #include <oxenc/hex.h>
@@ -242,6 +243,22 @@ struct MessageService::Impl {
                     } else if (gum.has_promotemessage()) {
                         msg.Type = MessageType::Control;
                         msg.Body = "[Promoted to Admin]";
+                        const auto& pm = gum.promotemessage();
+                        auto seedBytes = pm.groupidentityseed();
+                        if (!seedBytes.empty()) {
+                            Bytes seed(seedBytes.begin(), seedBytes.end());
+                            try {
+                                auto [pk, sk] = session::ed25519::ed25519_key_pair(
+                                    std::span<const unsigned char>(seed.data(), 32));
+                                msg.GroupId = "03" + Utils::BytesToHex(Bytes(pk.begin(), pk.end()));
+                                msg.GroupName = pm.name();
+                                GroupMgr.StoreAdminKey(msg.GroupId, seed);
+                            } catch (const std::exception& e) {
+                                std::cerr << "[Promote error] " << e.what() << "\n";
+                            }
+                        } else {
+                            msg.GroupId = conversationId;
+                        }
                     } else if (gum.has_memberleftmessage()) {
                         msg.Type = MessageType::Control;
                         msg.Body = "[Member Left]";

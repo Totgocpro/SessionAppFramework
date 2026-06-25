@@ -8,6 +8,7 @@ foreach(EXAMPLE
     05_echo_bot
      06_group_management_bot
      07_dual_bot_test
+     08_moderation_bot
 )
     add_executable(${EXAMPLE} ${EXAMPLE}.cpp)
     target_link_libraries(${EXAMPLE} PRIVATE SAF::SessionAppFramework)

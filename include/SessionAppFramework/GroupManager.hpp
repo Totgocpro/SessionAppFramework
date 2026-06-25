@@ -143,6 +143,14 @@ public:
     void DemoteAdmin(const std::string& groupId, const AccountId& memberId);
 
     /**
+     * @brief Stores the admin key (from a GroupUpdatePromoteMessage) for a group.
+     *        Called when the local account is promoted to admin by another admin.
+     * @param groupId  Group ID.
+     * @param seed     32-byte Ed25519 seed from the promote message.
+     */
+    void StoreAdminKey(const std::string& groupId, const Bytes& seed);
+
+    /**
      * @brief Joins a group (adds to local config).
      * @param groupId   Group ID to join.
      * @param name      Group name (from invitation).
